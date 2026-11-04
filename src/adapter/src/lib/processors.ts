@@ -9,7 +9,7 @@ import {
 import { handleAgentTemplateCommand, findRecentOutbound, markOutboundReplied } from "./templates";
 
 export interface InboundPush {
-  hook: "new"; unique: string; from: string; to: string; id?: string; username?: string; senderName?: string;
+  hook: "new"; unique: string; from: string; to: string; id?: string; from_id?: string; username?: string; senderName?: string;
   type: string; body?: string; caption?: string; isForwarded?: boolean | string; timestamp?: string; quote?: boolean; quoteUnique?: string;
 }
 
@@ -115,7 +115,12 @@ async function createConversation(line: string, waUserId: string, phone: string 
     wa_ProfileName: { isDisplayable: true, value: p.senderName ?? "" },
     wa_EntryPoint: { isDisplayable: true, value: out ? (p.type === "button" ? "template-button" : "outbound-reply") : "organic" },
     wa_Is24hWindowOpen: { isDisplayable: false, value: true },
+    // Mirror customercontext so the agent receives the values directly (msdyn_customengagementctx is only passed to the agent as a record reference)
+    wa_CustomerId: { isDisplayable: false, value: `${line}:${waUserId}` },
   };
+  if (phone) conversationcontext.wa_CustomerPhone = { isDisplayable: true, value: phone };
+  const username = String(p.username ?? "").trim();
+  if (username) conversationcontext.wa_Username = { isDisplayable: true, value: username };
   if (out) {
     conversationcontext.wa_TemplateName = { isDisplayable: true, value: out.templateName ?? "" };
     conversationcontext.wa_CampaignId = { isDisplayable: false, value: out.campaignId ?? "" };

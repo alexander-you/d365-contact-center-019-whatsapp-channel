@@ -102,9 +102,9 @@ Number replies (`1`, `2`, …) and typed labels are resolved the same way. Taps 
 | Variable | Set by |
 |---|---|
 | `wa_LastInteraction` | Selection event (only when `WA_SELECTION_EVENT=true`) |
-| `wa_UserId`, `wa_ProfileName`, `wa_LineNumber`, `wa_EntryPoint`, `wa_TemplateName` | Conversation context at creation |
+| `wa_UserId`, `wa_CustomerId`, `wa_CustomerPhone`, `wa_ProfileName`, `wa_Username`, `wa_LineNumber`, `wa_EntryPoint`, `wa_TemplateName` | Conversation context at creation |
 
-Each variable is created as a **global** variable with *External sources can set values* enabled. Its name matches the workstream context variable exactly.
+Each variable is created as a **global** variable with *External sources can set values* enabled. Its name matches the workstream context variable exactly. To reuse topics built for native channels that read `Global.msdyn_CustomerPhoneNumber`, fill it with `Coalesce(Global.msdyn_CustomerPhoneNumber, Global.wa_CustomerPhone)`; see [conversation-context.md](./conversation-context.md).
 
 ## 6. Deployment
 

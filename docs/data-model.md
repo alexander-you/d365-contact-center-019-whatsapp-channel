@@ -126,7 +126,10 @@ erDiagram
 |---|---|---|---|
 | `wa_LineNumber` | Text | No | WhatsApp business line |
 | `wa_UserId` | Text | No | WhatsApp user identifier (phone, or a WhatsApp-scoped id) |
+| `wa_CustomerId` | Text | No | `<line>:<user id>`, identical to `msdyn_customsenderid` |
+| `wa_CustomerPhone` | Text | Yes | Customer phone number, identical to `msdyn_customerphonenumber` (omitted when hidden) |
 | `wa_ProfileName` | Text | Yes | WhatsApp profile name |
+| `wa_Username` | Text | Yes | WhatsApp username, when the customer has one |
 | `wa_EntryPoint` | Text | Yes | `organic` · `outbound-reply` · `template-button` |
 | `wa_TemplateName` | Text | Yes | Template that triggered the conversation |
 | `wa_CampaignId` | Text | No | Outbound correlation |
@@ -134,7 +137,7 @@ erDiagram
 | `wa_Is24hWindowOpen` | Boolean | No | Informational |
 | `wa_LastInteraction` | Text (JSON) | No | Full payload of the latest button or list selection (only when `WA_SELECTION_EVENT=true`) |
 
-Copilot Studio receives each variable as a **global variable with the same name**, with *External sources can set values* enabled.
+Copilot Studio receives each variable as a **global variable with the same name**, with *External sources can set values* enabled. See [conversation-context.md](./conversation-context.md) for the naming contract, the `msdyn_customengagementctx` table and how customer identity flows to the agent.
 
 ## 3. Adapter state (Azure Table Storage)
 
