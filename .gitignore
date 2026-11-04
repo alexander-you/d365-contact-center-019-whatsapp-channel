@@ -1,0 +1,13 @@
+node_modules/
+dist/
+*.js.map
+local.settings.json
+.env
+env.json
+out.channel.json
+*.SECRET.*
+*.pfx
+*.pem
+*.cer
+.azure/
+.vscode/

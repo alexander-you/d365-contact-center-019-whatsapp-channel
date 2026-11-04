@@ -1,0 +1,74 @@
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: main
+  intent:
+    displayName: WA · Demo menu
+    triggerQueries:
+      - תפריט
+      - תפריט וואטסאפ
+      - הצג תפריט
+      - menu
+
+  actions:
+    - kind: BeginDialog
+      id: callAsk
+      input:
+        binding:
+          Prompt: במה אוכל לעזור?
+          Labels: שחרור משתמש|בדיקת חסימה|נציג אנושי
+          Ids: unlock|check|agent
+          Mode: auto
+          Footer: WhatsApp 019
+
+      dialog: {{BOT_SCHEMA}}.topic.WAAskWithOptions
+      output:
+        binding:
+          SelectedId: Topic.ChoiceId
+          SelectedLabel: Topic.ChoiceLabel
+          SelectionPayload: Topic.ChoicePayload
+
+    - kind: ConditionGroup
+      id: route
+      conditions:
+        - id: isAgent
+          condition: =Topic.ChoiceId = "agent"
+          actions:
+            - kind: SendActivity
+              id: sayTransfer
+              activity: מעביר אותך לנציג אנושי 🙂
+
+            - kind: TransferConversationV2
+              id: transfer
+              transferType:
+                kind: TransferToAgent
+                messageToAgent: "הלקוח ביקש נציג מתפריט WhatsApp"
+                context:
+                  kind: AutomaticTransferContext
+
+      elseActions:
+        - kind: SendActivity
+          id: sayChoice
+          activity: "בחרת: {Topic.ChoiceLabel} (מזהה: {Topic.ChoiceId})"
+
+        - kind: BeginDialog
+          id: callAsk2
+          input:
+            binding:
+              Prompt: באיזה סניף?
+              Labels: תל אביב|ירושלים|חיפה|באר שבע|אילת
+              Ids: tlv|jlm|hfa|bsh|eil
+              Header: סניפים
+
+          dialog: {{BOT_SCHEMA}}.topic.WAAskWithOptions
+          output:
+            binding:
+              SelectedId: Topic.BranchId
+              SelectedLabel: Topic.BranchLabel
+
+        - kind: SendActivity
+          id: sayBranch
+          activity: "נבחר סניף: {Topic.BranchLabel} ({Topic.BranchId}). תודה!"
+
+inputType: {}
+outputType: {}

@@ -1,0 +1,21 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "ServiceBusConnection__fullyQualifiedNamespace": "<namespace>.servicebus.windows.net",
+    "STORAGE_TABLE_URL": "https://<storage>.table.core.windows.net/",
+    "KEYVAULT_URL": "https://<key-vault>.vault.azure.net/",
+    "ENTRA_TENANT_ID": "00000000-0000-0000-0000-000000000000",
+    "ENTRA_CLIENT_ID": "00000000-0000-0000-0000-000000000000",
+    "ENTRA_ALLOWED_AUDIENCES": "api://<adapter-app-id>,<adapter-app-id>",
+    "D365_MESSAGING_BASE_URL": "https://m-<org-id>.<geo>.omnichannelengagementhub.com",
+    "D365_ORGANIZATION_ID": "00000000-0000-0000-0000-000000000000",
+    "D365_CHANNEL_ID": "00000000-0000-0000-0000-000000000000",
+    "D365_TOKEN_SCOPE": "https://<org-id-without-dashes>-c.<zone>.dynamics.com/.default",
+    "DATAVERSE_URL": "https://<your-org>.crm.dynamics.com",
+    "O19_BASE_URL": "https://019sms.co.il/whatsapp-api",
+    "O19_LINE_NUMBERS": "9725XXXXXXXX",
+    "O19_SIMULATOR": "true"
+  }
+}

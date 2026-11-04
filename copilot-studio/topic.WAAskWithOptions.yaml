@@ -1,0 +1,137 @@
+kind: AdaptiveDialog
+modelDescription: "Reusable component – WhatsApp (019) buttons/list. Do not trigger directly; call via Redirect with inputs Prompt, Labels (A|B|C), Ids (a|b|c), Mode, Header, Footer."
+beginDialog:
+  kind: OnRedirect
+  id: main
+  actions:
+    - kind: SetVariable
+      id: setIds
+      variable: Topic.IdsEff
+      value: =If(IsBlank(Topic.Ids), Topic.Labels, Topic.Ids)
+
+    - kind: SetVariable
+      id: setBlock
+      variable: Topic.Block
+      value: ="⟦wa|" & If(IsBlank(Topic.Mode), "auto", Topic.Mode) & "|" & Topic.Header & "|" & Topic.Footer & "⟧" & Concat(Sequence(CountRows(Split(Topic.Labels, "|"))), Char(10) & "⟦opt|" & Trim(Index(Split(Topic.IdsEff, "|"), Value).Value) & "|" & Trim(Index(Split(Topic.Labels, "|"), Value).Value) & "|⟧")
+
+    - kind: SetVariable
+      id: setMessage
+      variable: Topic.Message
+      value: =If(IsBlank(Topic.Prompt), "בחר/י אפשרות:", Topic.Prompt) & Char(10) & Topic.Block
+
+    - kind: SetVariable
+      id: setAttempts
+      variable: Topic.Attempts
+      value: =0
+
+    - kind: Question
+      id: askOptions
+      interruptionPolicy:
+        allowInterruption: false
+      alwaysPrompt: true
+      variable: init:Topic.Answer
+      prompt: "{Topic.Message}"
+      entity: StringPrebuiltEntity
+
+    - kind: SetVariable
+      id: setIndex
+      variable: Topic.SelectedIndex
+      value: =First(Filter(ForAll(Sequence(CountRows(Split(Topic.Labels, "|"))), {i: Value, l: Lower(Trim(Index(Split(Topic.Labels, "|"), Value).Value))}), l = Lower(Trim(Topic.Answer)) || Text(i) = Trim(Topic.Answer))).i
+
+    - kind: ConditionGroup
+      id: checkMatch
+      conditions:
+        - id: matched
+          condition: =!IsBlank(Topic.SelectedIndex)
+          actions:
+            - kind: SetVariable
+              id: setSelectedId
+              variable: Topic.SelectedId
+              value: =Trim(Index(Split(Topic.IdsEff, "|"), Topic.SelectedIndex).Value)
+
+            - kind: SetVariable
+              id: setSelectedLabel
+              variable: Topic.SelectedLabel
+              value: =Trim(Index(Split(Topic.Labels, "|"), Topic.SelectedIndex).Value)
+
+            - kind: SetVariable
+              id: setPayload
+              variable: Topic.SelectionPayload
+              value: =Global.wa_LastInteraction
+
+      elseActions:
+        - kind: SetVariable
+          id: incAttempts
+          variable: Topic.Attempts
+          value: =Topic.Attempts + 1
+
+        - kind: ConditionGroup
+          id: retryOrGiveUp
+          conditions:
+            - id: retry
+              condition: =Topic.Attempts < 2
+              actions:
+                - kind: SendActivity
+                  id: sendRetry
+                  activity: לא זיהיתי את הבחירה, אנא בחר/י אחת מהאפשרויות.
+
+                - kind: GotoAction
+                  id: gotoAsk
+                  actionId: askOptions
+
+          elseActions:
+            - kind: SetVariable
+              id: setNoMatch
+              variable: Topic.SelectedId
+              value: =""
+
+            - kind: SetVariable
+              id: setNoMatchLabel
+              variable: Topic.SelectedLabel
+              value: =Topic.Answer
+
+inputType:
+  properties:
+    Prompt:
+      displayName: Prompt
+      description: Text shown to the customer above the buttons/list
+      type: String
+
+    Labels:
+      displayName: Labels
+      description: "Option labels separated by | (max 10; ≤20 chars for buttons, ≤24 for list)"
+      type: String
+
+    Ids:
+      displayName: Ids
+      description: "Stable option ids separated by | (same order as Labels). Optional – defaults to Labels"
+      type: String
+
+    Mode:
+      displayName: Mode
+      description: "auto (default) | buttons | list | text"
+      type: String
+
+    Header:
+      displayName: Header
+      description: "List header text, or img:https://... for a button image header"
+      type: String
+
+    Footer:
+      displayName: Footer
+      type: String
+
+outputType:
+  properties:
+    SelectedId:
+      displayName: SelectedId
+      type: String
+
+    SelectedLabel:
+      displayName: SelectedLabel
+      type: String
+
+    SelectionPayload:
+      displayName: SelectionPayload
+      description: Full JSON payload from the adapter (wa_LastInteraction)
+      type: String

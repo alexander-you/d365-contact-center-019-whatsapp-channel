@@ -1,0 +1,38 @@
+kind: AdaptiveDialog
+modelDescription: "Type declarations for WhatsApp 019 global variables (set externally by Omnichannel). Never called – do not delete."
+beginDialog:
+  kind: OnRedirect
+  id: main
+  actions:
+    - kind: SetVariable
+      id: declLastInteraction
+      variable: Global.wa_LastInteraction
+      value: =""
+
+    - kind: SetVariable
+      id: declUserId
+      variable: Global.wa_UserId
+      value: =""
+
+    - kind: SetVariable
+      id: declProfileName
+      variable: Global.wa_ProfileName
+      value: =""
+
+    - kind: SetVariable
+      id: declEntryPoint
+      variable: Global.wa_EntryPoint
+      value: =""
+
+    - kind: SetVariable
+      id: declTemplateName
+      variable: Global.wa_TemplateName
+      value: =""
+
+    - kind: SetVariable
+      id: declLineNumber
+      variable: Global.wa_LineNumber
+      value: =""
+
+inputType: {}
+outputType: {}
