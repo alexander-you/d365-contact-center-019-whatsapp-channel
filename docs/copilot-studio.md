@@ -27,7 +27,9 @@ Buttons and lists are carried in the activity `text` as a reserved, machine-read
 | `⟦opt\|id\|label\|desc⟧` | `id` is a stable machine value. `label` is ≤20 characters for buttons and ≤24 for list rows. `desc` is the list row description (≤72). Up to 10 options |
 | `⟦url\|label\|url⟧` | Rendered as an external button when it is the only action. Otherwise it is appended as a link |
 
-The adapter also renders Copilot Studio **quick replies (suggested actions)**, **basic (Hero) cards** and **Adaptive Cards** (`Action.Submit`, `Input.ChoiceSet`, `Action.OpenUrl`), which is the same subset Microsoft documents for WhatsApp agents.
+The adapter also renders Copilot Studio **quick replies (suggested actions)**, **basic (Hero) cards** and **Adaptive Cards** (`Action.Submit`, `Input.ChoiceSet`, `Action.OpenUrl`), which is the same subset Microsoft documents for WhatsApp agents. As a compatibility fallback, options written as the last paragraph of a message and separated by `" / "` are also rendered as buttons or a list.
+
+For a no-code, step-by-step guide for makers, see [interactive-messages-maker-guide.md](./interactive-messages-maker-guide.md).
 
 ## 3. Reusable topic: *WA · Ask with options*
 

@@ -84,3 +84,27 @@ test("split long text and render template", () => {
   assert.equal(splitText("a".repeat(5000)).length, 2);
   assert.equal(renderTemplate("שלום {{1}}, פנייה {{2}}", { "1": "דנה\n", "2": "CAS-1" }), "שלום דנה, פנייה CAS-1");
 });
+
+test("inline choices flattened by Copilot Studio → list / buttons", () => {
+  const msg = "שלום, כאן העוזר הדיגיטלי של מוקד ה-IT. במה אפשר לעזור?\n\nאיפוס סיסמה / חיבור מרחוק / מדפסת / תקלת רשת / תיבה משותפת / נציג";
+  const r = planRender({ text: msg }, D);
+  assert.equal(r.plan.kind, "list");
+  assert.equal(r.set!.options.length, 6);
+  if (r.plan.kind === "list") {
+    assert.equal(r.plan.message, "שלום, כאן העוזר הדיגיטלי של מוקד ה-IT. במה אפשר לעזור?");
+    assert.equal(r.plan.items[1].title, "חיבור מרחוק");
+  }
+  const b = planRender({ text: "האם הבעיה נפתרה?\n\nכן / לא" }, D);
+  assert.equal(b.plan.kind, "buttons");
+  const sel = resolveSelection({ promptId: "p", kind: "list", source: "inline", options: r.set!.options }, { type: "list", body: "נציג" });
+  assert.equal(sel?.option.label, "נציג");
+});
+
+test("inline choices: prose is not converted", () => {
+  for (const text of [
+    "שורה אחת בלי פסקה / עם לוכסן",
+    "שלום\n\nאפשר לבחור באתר https://a.b / או בטלפון",
+    "הסבר\n\nזה משפט ארוך מאוד שמכיל לוכסן / והוא לא אמור להפוך לכפתורים בכלל.",
+    "שלום\n\nכן / כן",
+  ]) assert.equal(planRender({ text }, D).plan.kind, "text", text);
+});

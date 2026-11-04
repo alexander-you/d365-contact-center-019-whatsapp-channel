@@ -37,8 +37,9 @@ export function splitText(s: string, max = 4096): string[] {
 export type Mode = "auto" | "buttons" | "list" | "text";
 export interface Option { id: string; label: string; desc?: string; sent?: string }
 export interface OptionSet {
-  source: "block" | "suggestedActions" | "card";
+  source: "block" | "suggestedActions" | "card" | "inline";
   mode: Mode;
+  promptText?: string;
   header?: string;
   footer?: string;
   options: Option[];
@@ -146,8 +147,28 @@ export function fromCards(act: any): OptionSet | undefined {
   return undefined;
 }
 
+/**
+ * Copilot Studio flattens question choices into the message text on custom channels:
+ * "<prompt>\n\nA / B / C". Only the last paragraph is considered, and every choice must be short
+ * and free of URLs/sentence punctuation, to avoid turning ordinary prose into buttons.
+ */
+export function fromInlineChoices(text?: string): OptionSet | undefined {
+  if (!text) return undefined;
+  const t = text.replace(/\r\n/g, "\n").trim();
+  const cut = t.lastIndexOf("\n\n");
+  if (cut < 0) return undefined;
+  const prompt = t.slice(0, cut).trim();
+  const last = t.slice(cut + 2).replace(/\s*\n\s*/g, " ").trim();
+  if (!prompt || !last.includes(" / ")) return undefined;
+  const labels = last.split(/\s+\/\s+/).map((s) => s.trim()).filter(Boolean);
+  if (labels.length < 2 || labels.length > 10) return undefined;
+  if (labels.some((l) => l.length > 24 || /https?:|[.?!:;]$/.test(l))) return undefined;
+  if (new Set(labels.map((l) => l.toLowerCase())).size !== labels.length) return undefined;
+  return { source: "inline", mode: "auto", promptText: prompt, options: labels.map((label) => ({ id: label, label })) };
+}
+
 export function extractOptions(act: any): OptionSet | undefined {
-  return parseOptionBlock(act?.text) ?? fromSuggestedActions(act) ?? fromCards(act);
+  return parseOptionBlock(act?.text) ?? fromSuggestedActions(act) ?? fromCards(act) ?? fromInlineChoices(act?.text);
 }
 
 // ---------------------------------------------------------------- labels
@@ -178,7 +199,8 @@ export type RenderPlan =
 
 export function planRender(act: any, defaults: { prompt: string; listButtonText: string }): { plan: RenderPlan; set?: OptionSet } {
   const set = extractOptions(act);
-  const baseText = markdownToWhatsApp(stripOptionBlock(act?.text) || set?.cardText || "");
+  const rawText = set?.source === "inline" ? set.promptText! : stripOptionBlock(act?.text);
+  const baseText = markdownToWhatsApp(rawText || set?.cardText || "");
   if (!set) return { plan: { kind: "text", text: baseText } };
 
   const prompt = baseText || defaults.prompt;
