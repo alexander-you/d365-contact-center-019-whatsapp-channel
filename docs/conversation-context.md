@@ -9,7 +9,7 @@ When the first WhatsApp message of a conversation arrives, the adapter calls the
 | Path | Sent | Stored in Dynamics 365 | Reaches the agent as | Purpose |
 |---|---|---|---|---|
 | **`customercontext`** | Once, at conversation creation | `msdyn_customengagementctx` (one row per conversation) | A **record reference** only (ID + display name) | Customer identification and the representative's view of who is writing |
-| **`conversationcontext`** | Once, at conversation creation | Conversation runtime context | **Values** in global variables with the same names | Routing, agent logic, representative's customer summary |
+| **`conversationcontext`** | Once, at conversation creation | `msdyn_ocliveworkitemcontextitemelastic` (one row per variable) | **Values** in global variables with the same names | Routing, agent logic, representative's customer summary |
 | **`channelData`** | With every message | Message transcript | `System.Activity.ChannelData` | Per-message metadata (019 message ID, message type, selected option) |
 
 ```mermaid
@@ -17,6 +17,7 @@ flowchart LR
     W[WhatsApp push from 019] --> A[Adapter]
     A -- "customercontext" --> CE[(msdyn_customengagementctx)]
     A -- "conversationcontext" --> CTX[Workstream context variables]
+    CTX -- "persisted per conversation" --> CEL[(msdyn_ocliveworkitemcontextitemelastic)]
     A -- "message + channelData" --> MSG[Conversation messages]
     CE -- "record identification" --> CUST[Contact / Account on the conversation]
     CE -. "record reference only" .-> AG[Copilot Studio agent]
@@ -106,7 +107,41 @@ Names are case-sensitive. The `wa_` prefix keeps the channel's variables separat
 | `wa_Is24hWindowOpen` | No | Adapter | Informational |
 | `wa_LastInteraction` | No | Selection event | Full selection payload, only when `WA_SELECTION_EVENT=true` |
 
-### 3.5 WhatsApp usernames and hidden phone numbers
+### 3.5 Where context variables are stored
+
+Dynamics 365 persists the context of each conversation in the elastic table **`msdyn_ocliveworkitemcontextitemelastic`** (*Conversation context item*), one row per variable:
+
+| Column | Content |
+|---|---|
+| `msdyn_name` | Variable name, for example `wa_CustomerPhone` |
+| `msdyn_value` | Value as text. Lookups are stored as JSON `[{"RecordId":"…","PrimaryDisplayValue":"…"}]` |
+| `msdyn_datatype` | Data type of the workstream context variable |
+| `msdyn_isdisplayable` | Whether the representative sees it in the customer summary |
+| `msdyn_ocliveworkitemid` | The conversation |
+| `partitionid` | The conversation ID. Rows of one conversation share a partition |
+
+The table holds both **channel variables** (`wa_*`) and **system context** that Dynamics 365 adds at conversation start: `msdyn_WorkstreamId`, `msdyn_ChannelInstanceId`, `msdyn_Locale`, the identified customer (`msdyn_account_msdyn_ocliveworkitem_Customer` / contact), the linked case, and the reference to `msdyn_customengagementctx`.
+
+Why it matters:
+
+| Use | Detail |
+|---|---|
+| **Single source of truth** | It is the persisted copy of exactly what the agent and routing received. Use it to troubleshoot a missing variable. |
+| **Reporting and analytics** | Join it to `msdyn_ocliveworkitem` to report by entry point, template or business line. |
+| **Flows and integrations** | Power Automate or plug-ins can read a conversation's context after it starts, without access to the agent. |
+| **Scale** | As an elastic table (Azure Cosmos DB-backed), it supports high write volume. Query it by conversation (`partitionid`) for best performance. |
+
+Example query (Dataverse Web API):
+
+```http
+GET /api/data/v9.2/msdyn_ocliveworkitemcontextitemelastics
+    ?$filter=_msdyn_ocliveworkitemid_value eq <conversation id>
+    &$select=msdyn_name,msdyn_value,msdyn_isdisplayable
+```
+
+> The similarly named standard table `msdyn_ocliveworkitemcontextitem` holds only internal items such as `msdyn_lastmessageinfo`. Context variables from a custom channel are in the **elastic** table.
+
+### 3.6 WhatsApp usernames and hidden phone numbers
 
 WhatsApp is introducing **usernames**. A customer who uses a username can contact a business without revealing a phone number. Meta identifies such customers with a **business-scoped user ID (BSUID)**.
 
