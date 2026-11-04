@@ -130,7 +130,9 @@ sequenceDiagram
     O->>C: native buttons
     C->>O: tap "Unlock user"
     O->>A: push type=button, body="Unlock user"
-    A->>D: event wa.selection → wa_LastInteraction (full JSON)
+    opt WA_SELECTION_EVENT=true
+        A->>D: event wa.selection → wa_LastInteraction (full JSON)
+    end
     A->>D: message text="Unlock user" (+ value, channelData)
     D->>B: Question node matches → SelectedId = "unlock"
 ```
@@ -163,7 +165,7 @@ sequenceDiagram
 | WhatsApp (019) | Dynamics 365 |
 |---|---|
 | `text` | `message.text` |
-| `button`, `list` | Selection event (`wa_LastInteraction`) + `message.text` = original label |
+| `button`, `list` | `message.text` = original label + `value` / `channelData.wa.selection`. Optional selection event (`wa_LastInteraction`) |
 | `location` | Text with a map link |
 | `contacts` | Text with the contact name and number |
 | `reaction` | Ignored |

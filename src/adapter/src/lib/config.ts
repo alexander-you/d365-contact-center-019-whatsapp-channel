@@ -22,6 +22,8 @@ export const cfg = {
   o19BaseUrl: () => opt("O19_BASE_URL", "https://019sms.co.il/whatsapp-api").replace(/\/$/, ""),
   o19Lines: () => req("O19_LINE_NUMBERS").split(",").map((s) => s.trim()).filter(Boolean),
   o19Simulator: () => opt("O19_SIMULATOR", "false").toLowerCase() === "true",
+  // Off by default: D365 delivers custom events to the agent as empty messages, which breaks topics that handle every message.
+  selectionEvent: () => opt("WA_SELECTION_EVENT", "false").toLowerCase() === "true",
   tableUrl: () => req("STORAGE_TABLE_URL"),
   keyVaultUrl: () => req("KEYVAULT_URL"),
   defaultPrompt: () => opt("DEFAULT_PROMPT", "בחר/י אפשרות:"),

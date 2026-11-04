@@ -81,7 +81,9 @@ export async function processInbound(p: InboundPush, ctx: InvocationContext): Pr
         kind: pend.kind, source: pend.source, options: pend.options.map((o) => ({ id: o.id, label: o.label })),
         o19: p, receivedUtc: now(),
       };
-      await d365.customEvent(conversationId, "wa.selection", { wa_LastInteraction: { isDisplayable: false, value: JSON.stringify(payload) } });
+      if (cfg.selectionEvent()) {
+        await d365.customEvent(conversationId, "wa.selection", { wa_LastInteraction: { isDisplayable: false, value: JSON.stringify(payload) } });
+      }
       const value = pend.choiceSetId ? { [pend.choiceSetId]: sel.option.id } : { id: sel.option.id, label: sel.option.label, promptId: pend.promptId, kind: pend.kind };
       await d365.sendMessage(conversationId, {
         from, text: sel.option.label, value,

@@ -132,7 +132,7 @@ erDiagram
 | `wa_CampaignId` | Text | No | Outbound correlation |
 | `wa_RelatedRecordId` | Text | No | Record that triggered the outbound message |
 | `wa_Is24hWindowOpen` | Boolean | No | Informational |
-| `wa_LastInteraction` | Text (JSON) | No | Full payload of the latest button or list selection |
+| `wa_LastInteraction` | Text (JSON) | No | Full payload of the latest button or list selection (only when `WA_SELECTION_EVENT=true`) |
 
 Copilot Studio receives each variable as a **global variable with the same name**, with *External sources can set values* enabled.
 

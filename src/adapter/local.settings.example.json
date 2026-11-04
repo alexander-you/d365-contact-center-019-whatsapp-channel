@@ -16,6 +16,7 @@
     "DATAVERSE_URL": "https://<your-org>.crm.dynamics.com",
     "O19_BASE_URL": "https://019sms.co.il/whatsapp-api",
     "O19_LINE_NUMBERS": "9725XXXXXXXX",
-    "O19_SIMULATOR": "true"
+    "O19_SIMULATOR": "true",
+    "WA_SELECTION_EVENT": "false"
   }
 }

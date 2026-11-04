@@ -40,7 +40,7 @@ flowchart LR
 | **Native channel experience** | Messaging workstream, unified routing, queues, capacity, transcripts, automated messages, surveys and data masking, all standard Contact Center features |
 | **Copilot Studio first** | The agent greets, answers and escalates. Escalation keeps the full context |
 | **Interactive WhatsApp UI** | Reply buttons (up to 3) and lists (up to 10) rendered natively from Copilot Studio through a reusable topic, *WA · Ask with options* |
-| **Selection round-trip** | Every tap returns to the agent as **text** (for matching) **and** as a **full JSON payload** (`wa_LastInteraction`) |
+| **Selection round-trip** | Every tap returns to the agent as **text** (for matching) with the stable option ID in `value`. A full JSON payload (`wa_LastInteraction`) is available as an opt-in |
 | **Templates and outbound** | Template catalog synced into Dataverse. Outbound from flows, a custom connector or the `/tpl` agent command. Replies are correlated back into routed conversations |
 | **Delivery visibility** | Sent, delivered, read and failure states. Failures appear to the representative in the conversation |
 | **Zero-secret D365 webhook** | Dynamics 365 calls the adapter with an Entra token issued through a **Power Platform managed identity** and **federated credential** |

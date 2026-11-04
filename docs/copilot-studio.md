@@ -47,7 +47,7 @@ Makers call this topic with **Redirect** instead of authoring channel-specific n
 |---|---|
 | `SelectedId` | `unlock` |
 | `SelectedLabel` | `Unlock user` |
-| `SelectionPayload` | Full JSON selection payload (`Global.wa_LastInteraction`) |
+| `SelectionPayload` | Full JSON selection payload (`Global.wa_LastInteraction`, requires `WA_SELECTION_EVENT=true`) |
 
 Example topic call:
 
@@ -76,9 +76,9 @@ How the topic works:
 
 ## 4. Selection round-trip
 
-When the customer taps a button or list row, the adapter sends **two ordered activities** to the conversation:
+When the customer taps a button or list row, the adapter sends a **message** with `text` = the original label, plus `value` (`{ id, label, promptId, kind }`) and `channelData.wa.selection` (`id`, `index`, `method`). Question nodes and topics that read `System.Activity.Text` match natively.
 
-1. **Custom event `wa.selection`** that updates the context variable `wa_LastInteraction` with the full JSON:
+Optionally, set the app setting `WA_SELECTION_EVENT=true` to also send a **custom event `wa.selection`** first, which carries the full JSON in the context variable `wa_LastInteraction`. It is **off by default** because Dynamics 365 delivers custom events to the agent as an empty message, which topics that handle every incoming message (for example `OnActivity` dispatchers) would treat as an unrecognized reply. Payload when enabled:
 
    ```json
    {
@@ -95,15 +95,13 @@ When the customer taps a button or list row, the adapter sends **two ordered act
    }
    ```
 
-2. **Message** with `text` = the original label, plus `value` and `channelData.wa.selection`. The Question node matches natively.
-
 Number replies (`1`, `2`, …) and typed labels are resolved the same way. Taps on older prompts are forwarded as plain text.
 
 ## 5. Global variables
 
 | Variable | Set by |
 |---|---|
-| `wa_LastInteraction` | Selection event |
+| `wa_LastInteraction` | Selection event (only when `WA_SELECTION_EVENT=true`) |
 | `wa_UserId`, `wa_ProfileName`, `wa_LineNumber`, `wa_EntryPoint`, `wa_TemplateName` | Conversation context at creation |
 
 Each variable is created as a **global** variable with *External sources can set values* enabled. Its name matches the workstream context variable exactly.
