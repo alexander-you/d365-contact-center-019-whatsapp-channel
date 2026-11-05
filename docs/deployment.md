@@ -97,7 +97,7 @@ In the 019 portal (**Settings → URL assignment**), configure:
 | Check | Expected |
 |---|---|
 | `GET /api/health` | `{ ok: true }` |
-| `GET /api/ops/o19/phones` (function key) | `success: true` and the configured line |
+| `POST /api/outbound/templates/sync` (Entra JWT) | Template count from 019 (confirms the 019 credential) |
 | Send "Hi" on WhatsApp | Conversation in the workstream, agent reply on WhatsApp |
 | Send "menu" | Native WhatsApp buttons. A tap continues the topic with the right `SelectedId` |
 | `/tpl` from a representative | Template list or a sent confirmation |

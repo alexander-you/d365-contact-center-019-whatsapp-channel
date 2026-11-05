@@ -15,6 +15,7 @@ if (-not $role) {
 $names = @()
 foreach ($op in 'Create', 'Read', 'Write', 'Append', 'AppendTo') { $names += "prv${op}alex_watemplate"; $names += "prv${op}Activity" }  # custom activities use the shared Activity privileges
 foreach ($e in 'contact', 'incident', 'account') { $names += "prvRead$e"; $names += "prvAppendTo$e" }
+$names += 'prvReadmsdyn_occustommessagingchannel'   # honour the channel's "File attachments" settings
 
 $privs = foreach ($n in $names) {
     $p = (Invoke-Dv -Path "privileges?`$filter=name eq '$n'&`$select=privilegeid,name").value | Select-Object -First 1

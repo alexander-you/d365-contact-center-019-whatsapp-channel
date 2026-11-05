@@ -35,7 +35,7 @@ async function post(api: string, body: Record<string, unknown>, method: "POST" |
   try { json = text ? JSON.parse(text) : {}; } catch { json = { success: false, message: text }; }
   if (json && typeof json.data === "object" && json.data !== null && json.success === undefined) json = json.data; // 019 wraps some responses in { data: ... }
   const ok = res.ok && json.success !== false && (!json.ans || json.ans.status === "OK");
-  console.log(JSON.stringify({ evt: "O19Call", api, http: res.status, ok, reason: json?.ans?.reason }));
+  console.log(JSON.stringify({ evt: "O19Call", api, http: res.status, ok, reason: json?.ans?.reason ?? json?.message }));
   if (!ok) {
     const reason = Number(json?.ans?.reason ?? (json?.message === "timingRuleError" ? 7 : res.status));
     throw new O19Error(reason, api, json?.message ?? text.slice(0, 200));
@@ -70,6 +70,10 @@ export const o19 = {
   },
 
   typing: (source: string, destination: string) => post("typing", { source, destination }),
+
+  /** 019 send-whatsapp-file: public HTTPS link (extension must be supported), caption required. */
+  sendFile: (source: string, destination: string, link: string, caption: string) =>
+    post("send-whatsapp-file", { source, destination, link, message: caption || " ", replyTo: "" }),
 
   sendTemplate: (source: string, destination: string, p: { templateId: string; variables?: Record<string, string>; headerLink?: string; websiteVariable?: string; websiteVariable2?: string; otp?: string }) => {
     const b: Record<string, unknown> = { source, destination, templateId: p.templateId };
@@ -113,4 +117,24 @@ export const O19_FAILURE_TEXT: Record<number, string> = {
   6: "Invalid to/from", 7: "Recipient WhatsApp outdated / ToS not accepted", 8: "24h window closed – use a template", 9: "Unknown error",
   10: "Template variables error", 11: "Context issue", 12: "Template not approved", 13: "Recipient marked trial", 14: "Marketing template limit (2/24h)",
   15: "Template not found", 16: "Rate limit exceeded", 17: "Permission issue",
+};
+
+/** Representative-facing Hebrew text: what happened + what to do. Send API reasons (O19Error.reason). */
+export const O19_REASON_HE: Record<number, string> = {
+  2: "שגיאת חשבון אצל ספק ה-WhatsApp – לפנות לתמיכה", 3: "שגיאה כללית אצל ספק ה-WhatsApp – לנסות שוב",
+  4: "המספר אינו רשום ב-WhatsApp", 5: "ההודעה ריקה", 6: "שגיאת WhatsApp – לנסות שוב",
+  7: "חלון 24 השעות נסגר – יש לשלוח תבנית (/tpl)", 8: "פנייה ראשונה ללקוח – יש לשלוח תבנית (/tpl)",
+  9: "עומס שליחה – ההודעה תישלח שוב אוטומטית", 11: "עומס שליחה – ההודעה תישלח שוב אוטומטית", 15: "עומס שליחה – ההודעה תישלח שוב אוטומטית",
+  12: "שגיאה במשתני התבנית", 13: "שפת התבנית אינה תואמת", 14: "כותרת התבנית אינה תואמת", 17: "מספר משתני התבנית אינו תואם",
+  19: "התבנית ארוכה מדי", 20: "שגיאת קופון בתבנית", 21: "עומס – לנסות שוב בעוד רגע", 24: "שגיאה בקובץ – סוג או גודל לא נתמכים",
+};
+
+/** Representative-facing Hebrew text for delivery failures (system push messageUpdate). */
+export const O19_FAILURE_HE: Record<number, string> = {
+  1: "שגיאת שרת – לשלוח שוב", 2: "בעיית חיוב בחשבון ה-WhatsApp – לפנות לתמיכה", 3: "הקובץ המצורף פגום – לשלוח מחדש",
+  4: "חשבון ה-WhatsApp חסום לשליחה – לפנות לתמיכה", 5: "הגעת למכסת השליחה היומית", 6: "כתובת שולח ונמען זהות",
+  7: "אצל הלקוח גרסת WhatsApp ישנה או שלא אושרו תנאי השימוש", 8: "חלון 24 השעות נסגר – יש לשלוח תבנית (/tpl)",
+  9: "שגיאה לא ידועה – לפנות לתמיכה", 10: "שגיאה במשתני התבנית", 11: "שגיאה בתוכן ההודעה", 12: "התבנית לא אושרה על ידי Meta",
+  13: "מספר הלקוח מסומן כניסיון (trial)", 14: "נשלחו כבר 2 תבניות שיווק ללקוח ב-24 השעות האחרונות",
+  15: "התבנית לא נמצאה", 16: "עומס שליחה – לנסות שוב בעוד רגע", 17: "אין הרשאת שליחה בחשבון ה-WhatsApp – לפנות לספק",
 };

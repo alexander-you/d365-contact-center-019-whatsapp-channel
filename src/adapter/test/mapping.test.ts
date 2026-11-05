@@ -108,3 +108,32 @@ test("inline choices: prose is not converted", () => {
     "שלום\n\nכן / כן",
   ]) assert.equal(planRender({ text }, D).plan.kind, "text", text);
 });
+
+import { checkForO19, mediaUrlOf, extOf, mimeOf } from "../src/lib/media";
+
+test("019 file rules: type, size and extension", () => {
+  assert.deepEqual(checkForO19("invoice.pdf", "application/pdf", 1024), { ok: true, name: "invoice.pdf" });
+  const img = checkForO19("photo", "image/png", 1024);
+  assert.equal(img.ok && img.name, "photo.png");
+  const big = checkForO19("big.jpg", "image/jpeg", 6 * 1024 * 1024);
+  assert.equal(big.ok, false);
+  assert.equal(checkForO19("run.exe", "application/octet-stream", 10).ok, false);
+  assert.equal(checkForO19("סיכום שיחה.docx", "", 10).ok, true);
+});
+
+test("019 media link detection and helpers", () => {
+  assert.equal(mediaUrlOf({ type: "image", body: "https://x.example/a.jpg" }), "https://x.example/a.jpg");
+  assert.equal(mediaUrlOf({ type: "image", media: { url: "https://x.example/b.png" }, body: "" }), "https://x.example/b.png");
+  assert.equal(mediaUrlOf({ type: "image", media: "https://x.example/c.pdf" }), "https://x.example/c.pdf");
+  assert.equal(mediaUrlOf({ type: "image", body: "not a link" }), undefined);
+  assert.equal(extOf("a.B.JPEG"), "jpeg");
+  assert.equal(mimeOf("x.pdf"), "application/pdf");
+});
+import { referralOf } from "../src/lib/processors";
+
+test("referral: quoted message id and ad referral", () => {
+  assert.deepEqual(referralOf({ quoteUnique: "Q1", referral: { source_id: "ad1", headline: "h" } }), { quoteUnique: "Q1", referral: { source_id: "ad1", headline: "h" } });
+  assert.deepEqual(referralOf({ quote: false, referral: false }), {});
+  assert.deepEqual(referralOf({ referral: "" }), {});
+  assert.deepEqual(referralOf({ referral: '{"source_id":"x"}' }), { referral: { source_id: "x" } });
+});

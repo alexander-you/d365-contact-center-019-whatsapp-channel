@@ -1,12 +1,13 @@
 import { InvocationContext } from "@azure/functions";
 import { cfg } from "./config";
 import { d365, D365Error } from "./d365";
-import { o19, O19Error, O19_FAILURE_TEXT, O19_REASON_TEXT } from "./o19";
+import { o19, O19Error, O19_FAILURE_HE, O19_FAILURE_TEXT, O19_REASON_HE } from "./o19";
 import { Conversations, getEntity, upsert, remove, query, odata } from "./state";
 import {
-  CLOSE_EVENTS, MEDIA_TYPES, Pending, inboundToText, isSystemEvent, planRender, resolveSelection, splitText,
+  CLOSE_EVENTS, MEDIA_TYPES, Pending, inboundToText, isSystemEvent, markdownToWhatsApp, planRender, resolveSelection, splitText,
 } from "./mapping";
 import { handleAgentTemplateCommand, findRecentOutbound, markOutboundReplied } from "./templates";
+import { attachmentSettings, checkForO19, download, extOf, mediaUrlOf, mimeOf, publishForO19 } from "./media";
 
 export interface InboundPush {
   hook: "new"; unique: string; from: string; to: string; id?: string; from_id?: string; username?: string; senderName?: string;
@@ -14,15 +15,42 @@ export interface InboundPush {
 }
 
 const now = () => new Date().toISOString();
+
+/** Message the customer replied to or tapped (019 quoteUnique), and click-to-WhatsApp ad referral, when present. */
+export function referralOf(p: any): { quoteUnique?: string; referral?: unknown } {
+  const out: { quoteUnique?: string; referral?: unknown } = {};
+  if (p?.quoteUnique) out.quoteUnique = String(p.quoteUnique);
+  const r = p?.referral;
+  if (r && typeof r === "object" && Object.keys(r).length) out.referral = r;
+  else if (typeof r === "string" && r.trim() && r !== "false") { try { out.referral = JSON.parse(r); } catch { out.referral = r; } }
+  return out;
+}
+const AGENT_EVENTS = new Set(["AgentJoined", "AgentAccepted", "AgentAssigned", "AgentJoinedCustomerConversation", "TransferAgentAcceptSession"]);
 const waIdOf = (p: InboundPush) => {
   const alt = String((p as any).from_id ?? p.id ?? "");
   return alt.includes(".") ? alt : String(p.from);
 };
 
 // ============================================================ notices to representative
-export async function notice(conversationId: string, text: string, ctx?: InvocationContext): Promise<void> {
+/**
+ * Posts an automated notice to the representative. With a dedupe key, the same notice is shown at most once per
+ * conversation within WA_NOTICE_DEDUPE_MINUTES; repeats are counted and reported on the next notice.
+ */
+export async function notice(conversationId: string, text: string, ctx?: InvocationContext, dedupeKey?: string): Promise<void> {
   try {
-    await d365.sendMessage(conversationId, { text: `[WhatsApp] ${text}`, automated: true });
+    let suffix = "";
+    if (dedupeKey) {
+      const rk = dedupeKey.replace(/[\/\\#?]/g, "_").slice(0, 200);
+      const row = await getEntity<{ lastUtc: string; suppressed?: number }>("Notices", conversationId, rk);
+      const windowMs = cfg.noticeDedupeMinutes() * 60_000;
+      if (row && Date.now() - Date.parse(row.lastUtc) < windowMs) {
+        await upsert("Notices", conversationId, rk, { lastUtc: row.lastUtc, suppressed: (row.suppressed ?? 0) + 1 });
+        return;
+      }
+      if (row?.suppressed) suffix = ` (חזר ${row.suppressed + 1} פעמים)`;
+      await upsert("Notices", conversationId, rk, { lastUtc: now(), suppressed: 0 });
+    }
+    await d365.sendMessage(conversationId, { text: `[WhatsApp] ${text}${suffix}`, automated: true });
   } catch (e) {
     ctx?.warn(`notice failed: ${(e as Error).message}`);
   }
@@ -30,7 +58,7 @@ export async function notice(conversationId: string, text: string, ctx?: Invocat
 
 // ============================================================ inbound: customer -> D365
 export async function processInbound(p: InboundPush, ctx: InvocationContext): Promise<void> {
-  ctx.log(JSON.stringify({ evt: "O19Push", type: p.type }));
+  ctx.log(JSON.stringify({ evt: "O19Push", type: p.type, hasQuote: !!p.quoteUnique, hasReferral: !!referralOf(p).referral }));
   const line = String(p.to);
   const waUserId = waIdOf(p);
   const phone = /^\d{8,15}$/.test(String(p.from)) ? String(p.from) : undefined;
@@ -56,11 +84,37 @@ export async function processInbound(p: InboundPush, ctx: InvocationContext): Pr
   let conv = await Conversations.get(line, waUserId);
   let conversationId = conv?.state === "Active" ? conv.conversationId : undefined;
 
-  // Media is phase 2 – tell the customer and the representative
+  // Attachments: honour the channel's "customers can send file attachments" setting; files go to representatives, not to the agent bot (unless WA_MEDIA_TO_BOT=true)
+  let attachments: Array<{ contentType: string; contentUrl: string; name: string }> | undefined;
   if (MEDIA_TYPES.has(p.type)) {
-    await safeSend(() => o19.sendText(line, waUserId, cfg.mediaNotSupportedText()), ctx);
-    if (conversationId) await notice(conversationId, `📎 הלקוח שלח ${p.type} – קבצים אינם נתמכים כרגע בערוץ`, ctx);
-    if (!p.caption) return;
+    const url = mediaUrlOf(p);
+    ctx.log(JSON.stringify({ evt: "O19Media", type: p.type, hasUrl: !!url, mediaKind: typeof (p as any).media, mediaKeys: (p as any).media && typeof (p as any).media === "object" ? Object.keys((p as any).media) : undefined }));
+    const settings = await attachmentSettings();
+    const withAgent = conversationId && conv?.participant === "agent";
+    if (!settings.customers) {
+      await safeSend(() => o19.sendText(line, waUserId, cfg.mediaNotSupportedText()), ctx);
+      if (conversationId) await notice(conversationId, `📎 הלקוח שלח ${p.type} – קבלת קבצים כבויה בהגדרות הערוץ`, ctx);
+      if (!p.caption) return;
+    } else if (!withAgent && !cfg.mediaToBot()) {
+      await safeSend(() => o19.sendText(line, waUserId, cfg.mediaBotText()), ctx);
+      if (!p.caption) return;
+    } else {
+      try {
+        if (!url) throw new Error("no media link in push");
+        const f = await download(url, "o19", cfg.mediaInboundMaxMb() * 1024 * 1024);
+        const ext = extOf(f.name ?? "") || extOf(new URL(url).pathname);
+        const name = f.name ?? `${p.type}-${Date.now()}${ext ? "." + ext : ""}`;
+        const contentType = f.contentType !== "application/octet-stream" ? f.contentType : mimeOf(name);
+        attachments = [{ contentType, name, contentUrl: `data:${contentType};base64,${f.data.toString("base64")}` }];
+        ctx.log(JSON.stringify({ evt: "MediaInbound", type: p.type, contentType, bytes: f.data.length }));
+      } catch (e) {
+        ctx.warn(`inbound media failed: ${(e as Error).message}`);
+        const tooBig = /too large/.test((e as Error).message);
+        await safeSend(() => o19.sendText(line, waUserId, tooBig ? `הקובץ גדול מדי (מקסימום ${cfg.mediaInboundMaxMb()}MB) 🙏` : "לא הצלחנו לקבל את הקובץ, אפשר לנסות לשלוח שוב 🙏"), ctx);
+        if (conversationId) await notice(conversationId, `📎 הלקוח שלח ${p.type} אך הקובץ לא התקבל (${tooBig ? "גדול מדי" : "שגיאת הורדה"})`, ctx);
+        if (!p.caption) return;
+      }
+    }
   }
 
   const messageText = inboundToText(p);
@@ -87,19 +141,19 @@ export async function processInbound(p: InboundPush, ctx: InvocationContext): Pr
       const value = pend.choiceSetId ? { [pend.choiceSetId]: sel.option.id } : { id: sel.option.id, label: sel.option.label, promptId: pend.promptId, kind: pend.kind };
       await d365.sendMessage(conversationId, {
         from, text: sel.option.label, value,
-        channelData: { wa: { selection: { id: sel.option.id, index: sel.index, method: sel.method }, o19Unique: p.unique } },
+        channelData: { wa: { selection: { id: sel.option.id, index: sel.index, method: sel.method }, o19Unique: p.unique, ...referralOf(p) } },
       });
       await remove("PendingOptions", conversationId, "latest");
       ctx.log(JSON.stringify({ evt: "OptionMatched", method: sel.method, source: pend.source, conversationId }));
-    } else if (messageText) {
-      await d365.sendMessage(conversationId, { from, text: messageText, channelData: { wa: { o19Unique: p.unique, type: p.type } } });
+    } else if (messageText || attachments) {
+      await d365.sendMessage(conversationId, { from, text: messageText || undefined, attachments, channelData: { wa: { o19Unique: p.unique, type: p.type, ...referralOf(p) } } });
     }
   } catch (e) {
     if (e instanceof D365Error && (e.status === 404 || e.status === 409 || e.status === 400)) {
       ctx.warn(`conversation ${conversationId} not active (${e.status}); recreating`);
       await Conversations.set(line, waUserId, { state: "Closed" });
       const newId = await createConversation(line, waUserId, phone, p, ctx);
-      if (messageText) await d365.sendMessage(newId, { from, text: sel?.option.label ?? messageText });
+      if (messageText || attachments) await d365.sendMessage(newId, { from, text: (sel?.option.label ?? messageText) || undefined, attachments });
       conversationId = newId;
     } else throw e;
   }
@@ -119,8 +173,11 @@ async function createConversation(line: string, waUserId: string, phone: string 
     wa_CustomerId: { isDisplayable: false, value: `${line}:${waUserId}` },
   };
   if (phone) conversationcontext.wa_CustomerPhone = { isDisplayable: true, value: phone };
-  const username = String(p.username ?? "").trim();
+  const username = String((p as any).username ?? "").trim();
   if (username) conversationcontext.wa_Username = { isDisplayable: true, value: username };
+  const ref = referralOf(p);
+  if (ref.quoteUnique) conversationcontext.wa_ReferralMessageId = { isDisplayable: false, value: ref.quoteUnique };
+  if (ref.referral) conversationcontext.wa_Referral = { isDisplayable: false, value: JSON.stringify(ref.referral).slice(0, 2000) };
   if (out) {
     conversationcontext.wa_TemplateName = { isDisplayable: true, value: out.templateName ?? "" };
     conversationcontext.wa_CampaignId = { isDisplayable: false, value: out.campaignId ?? "" };
@@ -133,7 +190,7 @@ async function createConversation(line: string, waUserId: string, phone: string 
     startmessage: out ? { message: `📤 נשלחה תבנית WhatsApp (${out.templateName}) ב-${out.sentUtc}: ${out.renderedBody ?? ""}`.slice(0, 4000) } : undefined,
     skipdeflectionbot: out?.skipBot ?? false,
   });
-  await Conversations.set(line, waUserId, { conversationId: r.conversationId, state: "Active", createdUtc: now(), phone, profileName: p.senderName });
+  await Conversations.set(line, waUserId, { conversationId: r.conversationId, state: "Active", createdUtc: now(), phone, profileName: p.senderName, participant: "bot" });
   if (out) await markOutboundReplied(out, r.conversationId, ctx);
   if (!phone) await notice(r.conversationId, "ℹ️ מספר הטלפון של הלקוח מוסתר (WhatsApp username)", ctx);
   ctx.log(JSON.stringify({ evt: "ConversationCreated", isNew: r.isNew, conversationId: r.conversationId, entry: conversationcontext.wa_EntryPoint.value }));
@@ -166,10 +223,18 @@ export async function processOutbound(conversationId: string, act: any, ctx: Inv
       await Conversations.set(line, waUserId, { state: "Closed" });
       await remove("PendingOptions", conversationId, "latest");
       ctx.log(JSON.stringify({ evt: "ConversationClosed", name, conversationId }));
+    } else if (name && AGENT_EVENTS.has(name) && conv.participant !== "agent") {
+      await Conversations.set(line, waUserId, { participant: "agent" });
     }
     return;
   }
   if (act.type !== "message") return;
+
+  // Track who answers the customer: the agent bot sends with role "bot"; representatives don't
+  const participant: "bot" | "agent" = act.from?.role === "bot" ? "bot" : "agent";
+  if (conv.participant !== participant && act.channelData?.["messagingapi-oc"]?.type !== "AutomatedMessage") {
+    await Conversations.set(line, waUserId, { participant });
+  }
 
   // Representative slash command: /tpl <name> v1|v2
   if (typeof act.text === "string" && /^\s*\/tpl\b/i.test(act.text)) {
@@ -177,9 +242,42 @@ export async function processOutbound(conversationId: string, act: any, ctx: Inv
     return;
   }
 
-  if (act.attachments?.some((a: any) => a?.contentUrl && !String(a.contentType ?? "").includes("card"))) {
-    await notice(conversationId, "📎 שליחת קבצים ללקוח אינה נתמכת כרגע בערוץ (שלב 2)", ctx);
+  const files = (act.attachments ?? []).filter((a: any) => a?.contentUrl && !String(a.contentType ?? "").includes("card"));
+  let captionUsed = false;
+  if (files.length) {
+    const settings = await attachmentSettings();
+    if (participant === "agent" && !settings.agents) {
+      await notice(conversationId, "📎 שליחת קבצים ללקוח כבויה בהגדרות הערוץ – הקובץ לא נשלח", ctx);
+    } else {
+      for (const [i, a] of files.entries()) {
+        try {
+          const f = await download(String(a.contentUrl), "d365");
+          const contentType = a.contentType || f.contentType;
+          const chk = checkForO19(String(a.name ?? f.name ?? "file"), contentType, f.data.length);
+          if (!chk.ok) { await notice(conversationId, `📎 ${a.name ?? "הקובץ"} לא נשלח: ${chk.reason}`, ctx); continue; }
+          const link = await publishForO19(f.data, chk.name, contentType);
+          const caption = i === 0 && act.text ? markdownToWhatsApp(String(act.text)) : chk.name;
+          if (i === 0 && act.text) captionUsed = true;
+          // OOTB default (WA_FILE_DESTINATION=phone-first): 019 send-whatsapp-file rejects the WhatsApp ID (IL.…) with timingRuleError, so prefer the phone number
+          const fileDest = cfg.fileDestination() === "phone-first" && conv.phone ? conv.phone : waUserId;
+          const r = await o19.sendFile(line, fileDest, link, caption);
+          await recordSent(conversationId, r.ans?.unique, "file");
+          ctx.log(JSON.stringify({ evt: "MediaOutbound", conversationId, contentType, bytes: f.data.length, by: participant, dest: fileDest === waUserId ? "id" : "phone" }));
+        } catch (e) {
+          if (e instanceof O19Error && e.windowClosed) {
+            const hidden = !conv.phone && waUserId.includes(".");
+            await notice(conversationId, hidden
+              ? "📎 הקובץ לא נשלח: ספק ה-WhatsApp אינו תומך כרגע בשליחת קבצים ללקוח שמספר הטלפון שלו מוסתר"
+              : "⏱️ חלון 24 השעות נסגר – הקובץ לא נשלח", ctx);
+            return;
+          }
+          ctx.warn(`outbound media failed: ${(e as Error).message}`);
+          await notice(conversationId, `📎 ${a.name ?? "הקובץ"} לא נשלח ללקוח: ${e instanceof O19Error ? O19_REASON_HE[e.reason] ?? e.message : "שגיאת הורדה"}`, ctx, `file-${e instanceof O19Error ? e.reason : "download"}`);
+        }
+      }
+    }
   }
+  if (captionUsed && !act.suggestedActions?.actions?.length) return;
 
   const { plan, set } = planRender(act, { prompt: cfg.defaultPrompt(), listButtonText: cfg.listButtonText() });
   try {
@@ -206,12 +304,12 @@ export async function processOutbound(conversationId: string, act: any, ctx: Inv
   } catch (e) {
     if (e instanceof O19Error) {
       if (e.windowClosed) {
-        await notice(conversationId, "⏱️ חלון 24 השעות נסגר – ההודעה לא נשלחה. שלח/י תבנית: /tpl <שם_תבנית> ערך1|ערך2", ctx);
+        await notice(conversationId, "⏱️ חלון 24 השעות נסגר – ההודעה לא נשלחה. שלח/י תבנית: /tpl <שם_תבנית> ערך1|ערך2", ctx, "window-closed");
         ctx.log(JSON.stringify({ evt: "WindowClosed", conversationId }));
         return;
       }
       if (e.rateLimited) throw e; // Service Bus retry with backoff
-      await notice(conversationId, `⚠️ ההודעה לא נשלחה: ${O19_REASON_TEXT[e.reason] ?? e.message}`, ctx);
+      await notice(conversationId, `⚠️ ההודעה לא נשלחה: ${O19_REASON_HE[e.reason] ?? `קוד ${e.reason}`}`, ctx, `send-${e.reason}`);
       if ([2, 3, 6].includes(e.reason)) throw e;
       return;
     }
@@ -230,12 +328,12 @@ export async function processStatus(p: any, ctx: InvocationContext): Promise<voi
     return;
   }
   if (p.hook === "system") {
-    ctx.log(JSON.stringify({ evt: "O19System", type: p.type, messageUpdate: p.messageUpdate }));
+    ctx.log(JSON.stringify({ evt: "O19System", type: p.type, messageUpdate: p.messageUpdate, issues: p.issues }));
     if (p.type === "messages") {
       const reason = Number(p.messageUpdate);
       const text = O19_FAILURE_TEXT[reason] ?? `code ${reason}`;
       const map = (await query<{ partitionKey: string }>("MsgMap", odata`RowKey eq ${String(p.unique ?? "")}`, 1))[0];
-      if (map?.partitionKey) await notice(map.partitionKey, `⚠️ ההודעה לא נמסרה ללקוח: ${text}`, ctx);
+      if (map?.partitionKey) await notice(map.partitionKey, `⚠️ ההודעה לא נמסרה ללקוח: ${O19_FAILURE_HE[reason] ?? `קוד ${reason}`}`, ctx, `dlr-${reason}`);
       await updateOutboundStatus(String(p.unique ?? ""), 0, p, ctx, text);
       ctx.warn(JSON.stringify({ evt: "DeliveryFailed", reason }));
     } else if (p.type === "issues") {

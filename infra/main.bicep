@@ -59,12 +59,38 @@ resource deployContainer 'Microsoft.Storage/storageAccounts/blobServices/contain
   name: 'deployments'
 }
 
+// Private container for attachments the representative sends; 019 fetches them through short-lived signed adapter links
+resource mediaContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobSvc
+  name: 'wa-media'
+}
+
+resource mediaRetention 'Microsoft.Storage/storageAccounts/managementPolicies@2023-05-01' = {
+  parent: st
+  name: 'default'
+  properties: {
+    policy: {
+      rules: [
+        {
+          enabled: true
+          name: 'wa-media-1-day'
+          type: 'Lifecycle'
+          definition: {
+            actions: { baseBlob: { delete: { daysAfterCreationGreaterThan: 1 } } }
+            filters: { blobTypes: [ 'blockBlob' ], prefixMatch: [ 'wa-media/' ] }
+          }
+        }
+      ]
+    }
+  }
+}
+
 resource tableSvc 'Microsoft.Storage/storageAccounts/tableServices@2023-05-01' = {
   parent: st
   name: 'default'
 }
 
-var tableNames = [ 'Conversations', 'ConvIndex', 'PendingOptions', 'MsgMap', 'Dedupe', 'OptOut', 'OutboundLog' ]
+var tableNames = [ 'Conversations', 'ConvIndex', 'PendingOptions', 'MsgMap', 'Dedupe', 'OptOut', 'OutboundLog', 'Notices' ]
 resource tables 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-05-01' = [for t in tableNames: {
   parent: tableSvc
   name: t
@@ -194,7 +220,16 @@ resource func 'Microsoft.Web/sites@2023-12-01' = {
           authentication: { type: 'SystemAssignedIdentity' }
         }
       }
-      scaleAndConcurrency: { maximumInstanceCount: 40, instanceMemoryMB: 2048 }
+      scaleAndConcurrency: {
+        maximumInstanceCount: 40
+        instanceMemoryMB: 2048
+        // Always-ready instances remove cold starts after deployments and idle periods
+        alwaysReady: [
+          { name: 'http', instanceCount: 1 }
+          { name: 'function:ProcInbound', instanceCount: 1 }
+          { name: 'function:ProcOutbound', instanceCount: 1 }
+        ]
+      }
       runtime: { name: 'node', version: '22' }
     }
     siteConfig: {

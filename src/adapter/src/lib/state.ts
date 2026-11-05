@@ -60,6 +60,8 @@ export interface ConversationRow {
   phone?: string;
   profileName?: string;
   createdUtc?: string;
+  /** Who is currently answering the customer, from the latest outbound activity. */
+  participant?: "bot" | "agent";
 }
 
 export const Conversations = {

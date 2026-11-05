@@ -72,6 +72,7 @@ flowchart LR
 | [Security](docs/security.md) | Identity, authentication flows, network, secrets, threat model |
 | [Copilot Studio integration](docs/copilot-studio.md) | Option block contract, *WA · Ask with options*, selection payload |
 | [Maker guide: interactive messages](docs/interactive-messages-maker-guide.md) | No-code recipes for quick replies, buttons, lists and link buttons |
+| [Attachments](docs/attachments.md) | Images and files in both directions, channel settings, bot vs representative, signed links, 019 limits |
 | [Conversation context and customer identity](docs/conversation-context.md) | `msdyn_customengagementctx`, workstream context variables, naming contract, WhatsApp usernames |
 | [Templates and outbound](docs/templates-and-outbound.md) | Catalog sync, outbound API, `/tpl`, reply correlation, opt-out |
 | [Deployment guide](docs/deployment.md) | Step-by-step provisioning of Azure, Entra ID, Dataverse and Copilot Studio |

@@ -101,6 +101,8 @@ Names are case-sensitive. The `wa_` prefix keeps the channel's variables separat
 | `wa_ProfileName` | Yes | 019 push `senderName` | WhatsApp profile name, identical to `customercontext.preferredname` |
 | `wa_Username` | Yes | 019 push `username` | WhatsApp username, when the customer has one |
 | `wa_EntryPoint` | Yes | Adapter | `organic` · `outbound-reply` · `template-button` |
+| `wa_ReferralMessageId` | No | 019 push `quoteUnique` | 019 ID of the message the customer replied to or tapped (for example a template button) when starting the conversation |
+| `wa_Referral` | No | 019 push `referral` | Click-to-WhatsApp ad referral (JSON), when the conversation starts from an ad |
 | `wa_TemplateName` | Yes | Outbound log | Template that started the conversation (outbound replies only) |
 | `wa_CampaignId` | No | Outbound log | Campaign correlation (outbound replies only) |
 | `wa_RelatedRecordId` | No | Outbound log | Record that triggered the outbound message (outbound replies only) |
@@ -185,5 +187,9 @@ Message-level metadata travels in `channelData.wa` on each customer message, not
 | `wa.o19Unique` | 019 message ID of the customer message |
 | `wa.type` | WhatsApp message type (`text`, `button`, `list`, …) |
 | `wa.selection` | `{ id, index, method }` when the message is a button or list selection |
+| `wa.quoteUnique` | 019 ID of the message the customer replied to or tapped |
+| `wa.referral` | Click-to-WhatsApp ad referral object, when present |
+
+The referral fields appear on **every** message that carries them. The first one is also stored for the whole conversation in `wa_ReferralMessageId` / `wa_Referral`.
 
 Read it in Copilot Studio with `System.Activity.ChannelData`. Use `channelData` for facts about **one message**, and context variables for facts about **the whole conversation**.

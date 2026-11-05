@@ -19,7 +19,7 @@ function Ensure-Component([string]$schema, [string]$name, [int]$type, [string]$d
 }
 
 # Global variables that Omnichannel context can set (must match workstream context variable names exactly)
-foreach ($v in 'wa_LastInteraction', 'wa_UserId', 'wa_CustomerId', 'wa_CustomerPhone', 'wa_Username', 'wa_ProfileName', 'wa_EntryPoint', 'wa_TemplateName', 'wa_LineNumber') {
+foreach ($v in 'wa_LastInteraction', 'wa_UserId', 'wa_CustomerId', 'wa_CustomerPhone', 'wa_Username', 'wa_ReferralMessageId', 'wa_Referral', 'wa_ProfileName', 'wa_EntryPoint', 'wa_TemplateName', 'wa_LineNumber') {
     $yaml = "kind: Variable`nname: $v`nscope: Conversation`nisExternalInitializationAllowed: true`nisOutputToExternalCallers: false`ninitializationTimeoutInMilliseconds: 0`n"
     Ensure-Component "$prefix.GlobalVariableComponent.$v" $v 12 $yaml
 }

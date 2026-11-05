@@ -5,6 +5,7 @@ import { firstSeen } from "../lib/state";
 import { OutboundError, sendTemplate, syncTemplates } from "../lib/templates";
 import { simulatorLog } from "../lib/o19";
 import { enqueue } from "../lib/bus";
+import { openSigned } from "../lib/media";
 
 
 const json = (status: number, body: unknown): HttpResponseInit => ({ status, jsonBody: body });
@@ -17,6 +18,20 @@ async function checkPathSecret(req: HttpRequest): Promise<boolean> {
   for (let i = 0; i < got.length; i++) diff |= got.charCodeAt(i) ^ expected.charCodeAt(i);
   return diff === 0;
 }
+
+// ---------------------------------------------------------------- signed media links (019 fetches files the representative sends)
+app.http("MediaLink", {
+  route: "media/{*path}", methods: ["GET", "HEAD"], authLevel: "anonymous",
+  handler: async (req) => {
+    const path = String(req.params.path ?? "").split("/").map((s) => { try { return decodeURIComponent(s); } catch { return s; } }).join("/");
+    const f = await openSigned(path, Number(req.query.get("exp")), req.query.get("sig") ?? "");
+    if (!f) return { status: 404 };
+    return {
+      status: 200, body: req.method === "HEAD" ? undefined : f.data,
+      headers: { "Content-Type": f.contentType, "Content-Length": String(f.data.length), "Cache-Control": "private, max-age=300", "X-Content-Type-Options": "nosniff" },
+    };
+  },
+});
 
 // ---------------------------------------------------------------- 019 -> adapter (incoming messages)
 app.http("In019Incoming", {
@@ -87,23 +102,6 @@ app.http("ApiTemplatesSync", {
   handler: async (req, ctx) => {
     try { await validateBearer(req.headers.get("authorization")); } catch (e) { return json(401, { error: (e as Error).message }); }
     return json(200, { synced: await syncTemplates(ctx) });
-  },
-});
-
-// ---------------------------------------------------------------- ops: verify 019 credentials + list verified WhatsApp lines
-app.http("OpsO19Phones", {
-  route: "ops/o19/phones", methods: ["GET"], authLevel: "function",
-  handler: async (req, ctx) => {
-    try {
-      const token = await secret(SECRETS.o19Token);
-      const res = await fetch(`${cfg.o19BaseUrl()}/get-whatsapp-phones`, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
-      let body: any = await res.json().catch(() => ({}));
-      if (body?.data && body.success === undefined) body = body.data;
-      return json(200, { success: !!body?.success, phones: body?.phones ?? [] });
-    } catch (e) {
-      ctx.error(e);
-      return json(500, { error: (e as Error).message });
-    }
   },
 });
 

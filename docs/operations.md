@@ -57,5 +57,11 @@ traces
 | Endpoint | Auth | Purpose |
 |---|---|---|
 | `GET /api/health` | Anonymous | Liveness |
-| `GET /api/ops/o19/phones` | Function key | 019 credential check and verified lines |
 | `POST /api/outbound/templates/sync` | Entra JWT | On-demand template catalog sync |
+
+## Representative notices
+
+The adapter posts automated `[WhatsApp]` notices to the representative (delivery failures, closed 24-hour window, files that couldn't be sent, opt-out, hidden phone number).
+
+- Notices are in **Hebrew** and say what happened and what to do. 019 error codes are mapped in `O19_REASON_HE` (send errors) and `O19_FAILURE_HE` (delivery failures).
+- **De-duplication:** the same notice (conversation + error code) is shown at most once per `WA_NOTICE_DEDUPE_MINUTES` (default 5). Repeats are counted, and the next notice shows `(חזר N פעמים)`. State is kept in the `Notices` table.

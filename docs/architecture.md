@@ -169,7 +169,7 @@ sequenceDiagram
 | `location` | Text with a map link |
 | `contacts` | Text with the contact name and number |
 | `reaction` | Ignored |
-| Media (`image`, `video`, `audio`, `ptt`, `document`) | Customer receives a "text only" response. Representative is notified |
+| Media (`image`, `video`, `audio`, `ptt`, `document`) | Attachment in the conversation when the channel allows customer attachments and a representative is handling it. See [attachments.md](./attachments.md) |
 
 | Dynamics 365 activity | WhatsApp (019) |
 |---|---|
