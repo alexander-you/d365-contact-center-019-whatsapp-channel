@@ -1,0 +1,55 @@
+name: release
+
+# Builds a ready-to-deploy adapter package when a version tag (v*) is pushed and attaches it to a GitHub Release.
+# No cloud credentials are used: the workflow only reads this repository and publishes the package here.
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/adapter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/adapter/package-lock.json
+
+      - name: Build and test
+        run: |
+          npm ci
+          npm test
+
+      - name: Assemble production package
+        run: |
+          set -euo pipefail
+          rm -rf dist/test
+          find dist -name '*.map' -delete
+          npm prune --omit=dev
+          PKG="adapter-${GITHUB_REF_NAME}.zip"
+          zip -qr "../../$PKG" dist host.json package.json package-lock.json node_modules
+          cd ../..
+          sha256sum "$PKG" > "$PKG.sha256"
+          echo "PKG=$PKG" >> "$GITHUB_ENV"
+
+      - name: Bicep templates
+        working-directory: .
+        run: |
+          az bicep build --file infra/main.bicep --outfile main.json
+          az bicep build --file infra/kv-secrets.bicep --outfile kv-secrets.json
+
+      - name: Publish release
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$PKG" "$PKG.sha256" main.json kv-secrets.json \
+            --title "$GITHUB_REF_NAME" --generate-notes --verify-tag

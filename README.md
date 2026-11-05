@@ -85,14 +85,12 @@ flowchart LR
 az group create -n rg-wa019-dev -l westeurope
 az deployment group create -g rg-wa019-dev -f infra/main.bicep -p infra/main.parameters.json
 
-# 2. Adapter
-cd src/adapter
-npm ci
-npm test
-func azure functionapp publish <function-app-name> --typescript
+# 2. Adapter: download adapter-<version>.zip from the latest GitHub Release, then
+az functionapp deployment source config-zip -g rg-wa019-dev -n <function-app-name> --src adapter-<version>.zip
+#    (or build from source: cd src/adapter; npm ci; npm test; func azure functionapp publish <function-app-name> --typescript)
 
 # 3. Dynamics 365 Contact Center + Copilot Studio
-cd ../../scripts
+cd scripts
 copy env.example.json env.json     # fill in your environment values
 ./01-solution-and-tables.ps1
 ./02-channel.ps1

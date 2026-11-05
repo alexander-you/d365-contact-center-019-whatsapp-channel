@@ -49,6 +49,22 @@ Pass `secretsJson` as a secure parameter, and delete `secrets.json` after deploy
 
 ## 4. Adapter
 
+### Option A (recommended): deploy the release package
+
+Each [GitHub Release](../../../releases) contains a ready-to-deploy package built and tested by the `release` workflow: `adapter-<version>.zip` (compiled code and production dependencies), its SHA-256 checksum, and the compiled ARM templates.
+
+```powershell
+# Download adapter-<version>.zip and adapter-<version>.zip.sha256 from the release, then verify
+(Get-FileHash .\adapter-<version>.zip -Algorithm SHA256).Hash.ToLower()   # compare with the .sha256 file
+
+az functionapp config appsettings set -g rg-wa019-dev -n <function-app> --settings @appsettings.json
+az functionapp deployment source config-zip -g rg-wa019-dev -n <function-app> --src .\adapter-<version>.zip
+```
+
+No build tools are needed on the deploying machine.
+
+### Option B: build from source
+
 ```powershell
 cd src/adapter
 npm ci
