@@ -5,8 +5,11 @@
 WhatsApp templates are created and approved in the 019 portal. The adapter keeps a Dataverse catalog (`WhatsApp Template`) in sync:
 
 - **Timer sync:** every 15 minutes, `get-phone-templates` → upsert by the 019 template id (alternate key).
-- **Push sync:** template status events (approved, rejected, paused, banned, flagged, deleted) update the status immediately.
+- **Push sync:** template status events (approved, rejected, paused, banned, flagged, deleted) update the status immediately. The **category** (utility, marketing, authentication) is set from these events only, because `get-phone-templates` doesn't return it.
+- **Language:** 019 returns numeric language codes. `1` is stored as `he`; unknown codes are stored as received.
 - **Admin columns are never overwritten:** *Usage* (Agent / Automation / Bot / Campaign), *Variable labels* and *Variable bindings*.
+- **Templates created through 019 only:** `get-phone-templates` lists the templates managed in 019. Templates created directly in Meta WhatsApp Manager don't appear until they're added in 019.
+- **Admin access:** the catalog appears in the Copilot Service admin center under *Customer support*, below *Customer settings*. Add the `WhatsApp Template` table to the admin app's site map to expose it in your environment.
 
 | 019 status | Dataverse status |
 |---|---|

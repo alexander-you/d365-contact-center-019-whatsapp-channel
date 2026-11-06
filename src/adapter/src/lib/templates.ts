@@ -44,6 +44,10 @@ export async function listAgentTemplates(line: string): Promise<TemplateRow[]> {
   return r.value.filter((t) => !t.alex_usage || String(t.alex_usage).split(",").includes(String(CH.usage.agent)));
 }
 
+/** 019 returns numeric language codes that it doesn't document; "1" is Hebrew (observed). Unknown codes are kept as-is. */
+const O19_LANGUAGES: Record<string, string> = { "1": "he" };
+export const o19Language = (v: unknown) => { const s = String(v ?? "").trim(); return O19_LANGUAGES[s] ?? s; };
+
 export async function syncTemplates(ctx: InvocationContext): Promise<number> {
   let n = 0;
   for (const line of cfg.o19Lines()) {
@@ -52,7 +56,7 @@ export async function syncTemplates(ctx: InvocationContext): Promise<number> {
       const body = String(t.body ?? "");
       const varCount = new Set(body.match(/\{\{\d\}\}/g) ?? []).size;
       const record: Record<string, unknown> = {
-        alex_name: String(t.name ?? t.templateId).trim(), alex_linenumber: line, alex_language: String(t.language ?? ""),
+        alex_name: String(t.name ?? t.templateId).trim(), alex_linenumber: line, alex_language: o19Language(t.language),
         alex_body: body, alex_variablecount: varCount, alex_headertype: String(t.headers ?? ""), alex_buttons: String(t.buttons ?? ""),
         alex_quickreplies: [t.quickReply1, t.quickReply2, t.quickReply3].filter(Boolean).join(" | "),
         alex_ctawebsiteurl: String(t.callToActionWebsiteURL ?? ""), alex_status: mapTemplateStatus(Number(t.status)),
