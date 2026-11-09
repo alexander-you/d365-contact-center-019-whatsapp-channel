@@ -102,10 +102,14 @@ Names are case-sensitive. The `wa_` prefix keeps the channel's variables separat
 | `wa_Username` | Yes | 019 push `username` | WhatsApp username, when the customer has one |
 | `wa_EntryPoint` | Yes | Adapter | `organic` · `outbound-reply` · `template-button` |
 | `wa_ReferralMessageId` | No | 019 push `quoteUnique` | 019 ID of the message the customer replied to or tapped (for example a template button) when starting the conversation |
-| `wa_Referral` | No | 019 push `referral` | Click-to-WhatsApp ad referral (JSON), when the conversation starts from an ad |
-| `wa_TemplateName` | Yes | Outbound log | Template that started the conversation (outbound replies only) |
-| `wa_CampaignId` | No | Outbound log | Campaign correlation (outbound replies only) |
-| `wa_RelatedRecordId` | No | Outbound log | Record that triggered the outbound message (outbound replies only) |
+| `wa_Referral` | No | 019 push `referral` | Click-to-WhatsApp ad referral (JSON), when the conversation starts from an ad. Empty referrals (`ref_type: none`) are ignored |
+| `wa_TemplateName` | Yes | WhatsApp Message row | Template that started the conversation (outbound replies only) |
+| `wa_OutboundMessageId` | No | WhatsApp Message row | Row ID of the message the customer replied to (outbound replies only) |
+| `wa_TemplateButton` | Yes | 019 push | Label of the template quick-reply button the customer tapped |
+| `wa_TemplateButtonIndex` | No | WhatsApp Message row | 1-based position of the tapped button |
+| `wa_CampaignId` | No | WhatsApp Message row | Campaign correlation (outbound replies only) |
+| `wa_RelatedEntity` | No | WhatsApp Message row | Table of the record that triggered the outbound message |
+| `wa_RelatedRecordId` | No | WhatsApp Message row | Record that triggered the outbound message (outbound replies only) |
 | `wa_Is24hWindowOpen` | No | Adapter | Informational |
 | `wa_LastInteraction` | No | Selection event | Full selection payload, only when `WA_SELECTION_EVENT=true` |
 

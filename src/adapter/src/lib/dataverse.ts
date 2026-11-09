@@ -31,6 +31,9 @@ export const CH = {
   category: { utility: 626210000, marketing: 626210001, authentication: 626210002 },
   delivery: { queued: 626210000, sent: 626210001, delivered: 626210002, read: 626210003, failed: 626210004, replied: 626210005 },
   usage: { agent: 626210000, automation: 626210001, bot: 626210002, campaign: 626210003 },
+  // WhatsApp Message (outbound request) lifecycle and source
+  msgStatus: { queued: 626210000, scheduled: 626210001, sending: 626210002, sent: 626210003, delivered: 626210004, read: 626210005, replied: 626210006, failed: 626210007, canceled: 626210008, expired: 626210009 },
+  msgSource: { api: 626210000, flow: 626210001, agent: 626210002, bot: 626210003, campaign: 626210004 },
 };
 
 /** 019 template status code -> Dataverse choice. Docs: 0 pending, 1 approved, 2-5 rejected, 6 paused, 7 banned, 9 deleted, 10 flagged, 11 unflagged. */

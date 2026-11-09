@@ -108,6 +108,8 @@ var queues = [
   { name: 'sb-inbound', session: true }
   { name: 'sb-outbound', session: true }
   { name: 'sb-status', session: false }
+  // Outbound message requests (rows in the WhatsApp Message elastic table); supports scheduled enqueue
+  { name: 'sb-template', session: false, ttl: 'P14D' }
 ]
 resource sbQueues 'Microsoft.ServiceBus/namespaces/queues@2022-10-01-preview' = [for q in queues: {
   parent: sb
@@ -116,7 +118,7 @@ resource sbQueues 'Microsoft.ServiceBus/namespaces/queues@2022-10-01-preview' = 
     requiresSession: q.session
     maxDeliveryCount: 5
     lockDuration: 'PT1M'
-    defaultMessageTimeToLive: 'P1D'
+    defaultMessageTimeToLive: q.?ttl ?? 'P1D'
     deadLetteringOnMessageExpiration: true
   }
 }]

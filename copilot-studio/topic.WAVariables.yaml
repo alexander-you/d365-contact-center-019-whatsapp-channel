@@ -34,5 +34,35 @@ beginDialog:
       variable: Global.wa_LineNumber
       value: =""
 
+    - kind: SetVariable
+      id: declOutboundMessageId
+      variable: Global.wa_OutboundMessageId
+      value: =""
+
+    - kind: SetVariable
+      id: declTemplateButton
+      variable: Global.wa_TemplateButton
+      value: =""
+
+    - kind: SetVariable
+      id: declTemplateButtonIndex
+      variable: Global.wa_TemplateButtonIndex
+      value: =""
+
+    - kind: SetVariable
+      id: declCampaignId
+      variable: Global.wa_CampaignId
+      value: =""
+
+    - kind: SetVariable
+      id: declRelatedRecordId
+      variable: Global.wa_RelatedRecordId
+      value: =""
+
+    - kind: SetVariable
+      id: declRelatedEntity
+      variable: Global.wa_RelatedEntity
+      value: =""
+
 inputType: {}
 outputType: {}

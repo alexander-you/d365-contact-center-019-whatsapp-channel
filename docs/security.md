@@ -7,7 +7,9 @@
 | **Adapter app registration** | Microsoft Entra single-tenant app, **certificate credential**, `requestedAccessTokenVersion = 2`, Application ID URI `api://<appId>` | (a) Adapter → Messaging API and Dataverse (client credentials). (b) Audience for D365 webhook tokens. (c) Audience for the outbound API |
 | **Power Platform managed identity** | Dataverse `managedidentity` record + **federated identity credential** on the app | D365 → Adapter webhook. **No stored secret** |
 | **Function App managed identity** | System-assigned | Key Vault, Storage and Service Bus (RBAC) |
-| **Dataverse application user** | Bound to the adapter app, custom role *WhatsApp 019 Adapter* | Template catalog and outbound activity writes |
+| **Dataverse application user** | Bound to the adapter app, custom role *WhatsApp 019 Adapter* | Template catalog, WhatsApp Message updates and outbound activity writes |
+| **Plug-in managed identity** | Separate Entra app + **federated credentials** bound to the signed plug-in assembly (Dataverse `managedidentity` record) | Dataverse plug-in → Service Bus `sb-template` (*Azure Service Bus Data Sender* on that queue only). **No stored secret** |
+| **Message senders** | Users, flow connections, agents with role *WhatsApp Message Sender* | Call the Send / Cancel Custom APIs |
 | **019 API token** | Bearer token held in Key Vault | Adapter → 019 |
 
 ## 2. Authentication flows
@@ -76,6 +78,7 @@ The adapter reads secrets with its managed identity and caches them for 5 minute
 |---|---|---|
 | Conversation transcript | Dataverse | Contact Center retention policy |
 | Message bodies in transit | Service Bus | 1-day TTL |
+| Outbound template requests (recipient, variables, rendered body, status) | Dataverse *WhatsApp Message* (elastic) | Automatic deletion after `<prefix>_WaRetentionDays` (default 365). The `sb-template` queue holds only row IDs |
 | Adapter state | Table Storage | IDs and routing keys only, **no message content** |
 | Telemetry | Application Insights | Event names, types, ids and status codes. **No message text or phone numbers** |
 
@@ -88,12 +91,14 @@ Contact Center **data masking rules** apply to the channel, for example credit c
 | **Spoofing** – forged D365 webhook | `/api/d365/*` | Entra JWT validation (issuer, audience, tenant, client) |
 | **Spoofing** – forged 019 push | `/api/019/*` | Route secret, line allow-list, schema validation. Optional WAF IP filter |
 | **Tampering** – replayed messages | All ingress | Idempotency store, Service Bus duplicate-safe processing |
-| **Repudiation** | Outbound templates | Dataverse activity per send, with requester and delivery status |
+| **Repudiation** | Outbound templates | *WhatsApp Message* row per send (created by, source, lifecycle timestamps, delivery status); optional timeline activity |
 | **Information disclosure** | Logs and storage | No message content in logs or tables. Private endpoints. RBAC |
 | **Denial of service** | Public endpoints | Fast ACK + queue buffering, Flex scale-out. Optional WAF rate limiting |
-| **Elevation of privilege** | Dataverse app user | Dedicated least-privilege role (template catalog + activity only) |
+| **Elevation of privilege** | Dataverse app user | Dedicated least-privilege role (template catalog, WhatsApp Message, activity) |
+| **Elevation of privilege** | Send Custom API | Execute privilege `prvCreate<prefix>_wamessage`; callers need *WhatsApp Message Sender* |
+| **Spoofing** – forged enqueue | `sb-template` | Only the plug-in identity has *Data Sender*; the adapter re-reads the Dataverse row and ignores queue content other than the ID |
 
 ## 7. Compliance notes
 
 - WhatsApp messages are processed by Meta and 019 as part of the WhatsApp Business Platform.
-- Customer opt-out keywords are honored. Outbound sends to opted-out customers are blocked (HTTP 409).
+- Customer opt-out keywords are honored. Outbound sends to opted-out customers are blocked (the message is recorded as *Failed* with `OPTED_OUT`).

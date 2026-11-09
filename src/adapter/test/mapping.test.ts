@@ -137,3 +137,9 @@ test("referral: quoted message id and ad referral", () => {
   assert.deepEqual(referralOf({ referral: "" }), {});
   assert.deepEqual(referralOf({ referral: '{"source_id":"x"}' }), { referral: { source_id: "x" } });
 });
+
+test("referral: 019 'ref_type: none' is not an ad referral", () => {
+  assert.deepEqual(referralOf({ quoteUnique: "Q9", referral: { ref_type: "none" } }), { quoteUnique: "Q9" });
+  assert.deepEqual(referralOf({ referral: '{"ref_type":"none"}' }), {});
+  assert.deepEqual(referralOf({ referral: { ref_type: "ad", source_id: "1" } }), { referral: { ref_type: "ad", source_id: "1" } });
+});

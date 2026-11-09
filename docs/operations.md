@@ -14,7 +14,10 @@ The adapter emits structured events to Application Insights. Events carry ids, t
 | `OptionMatched` | Selection resolved (`method`: tap / number / typed) |
 | `O19Call` | 019 API call result (`api`, `http`, `reason`) |
 | `O19System` | 019 system event (delivery failure, template, account) |
-| `TemplateSent` / `TemplateSync` | Outbound template and catalog sync |
+| `MessageQueued` | REST or `/tpl` request accepted (WhatsApp Message row created) |
+| `MessageSent` / `MessageFailed` | Outbound template sent to 019, or failed (`code`) |
+| `MessageSkipped` / `MessageNotDue` | Queue item ignored: row canceled or already processed / scheduled time not reached |
+| `TemplateSync` | Template catalog sync |
 | `WindowClosed` | Send attempted outside the 24-hour window |
 | `ConversationClosed` | Close event from Dynamics 365 |
 
@@ -36,7 +39,8 @@ traces
 | Webhook probing | More than 10 rejected JWT or route-secret calls in 5 minutes |
 | 019 account event | `O19System` with `type = issues` (Severity 1) |
 | Delivery failures | Failure rate above 5% in 15 minutes |
-| Dead-letter queue | Any message in a DLQ |
+| Dead-letter queue | Any message in a DLQ (including `sb-template`) |
+| Outbound failures | *WhatsApp Message* rows with status *Failed* above your threshold (Power Automate or a Dataverse view) |
 | Credential expiry | Certificate or 019 token expiring within 30 days |
 | Inbound silence | No `O19Push` for N minutes during business hours |
 
@@ -50,7 +54,10 @@ traces
 | **Rotate the route secret** | Write a new secret → update both 019 push URLs |
 | **Add a WhatsApp line** | Verify the line in 019 → append it to `O19_LINE_NUMBERS` |
 | **Replay the DLQ** | Inspect with Service Bus Explorer → resubmit after fixing the root cause |
-| **New environment** | `main.bicep` → app registration → secrets → adapter → scripts 01–04 → 019 URLs |
+| **Requeue an outbound message** | Set *Message Status* back to *Queued* on the WhatsApp Message row (the update step enqueues it again) |
+| **Rotate the plug-in signing certificate** | Sign with the new certificate and rerun `06-plugin-and-custom-api.ps1 -CertificatePath …` (adds the matching federated credential), then remove the old credential from the plug-in app |
+| **Outbound stuck in *Queued*** | Check the plug-in trace log (`EnqueueMessage`) and Application Insights exceptions for `ProcTemplate`. See [troubleshooting](outbound-messaging.md#10-troubleshooting) |
+| **New environment** | `main.bicep` → app registration → secrets → adapter → scripts 01–03, 05, 06, 04 → 019 URLs |
 
 ## 4. Health endpoints
 

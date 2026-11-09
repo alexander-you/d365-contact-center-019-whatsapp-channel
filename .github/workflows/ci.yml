@@ -24,6 +24,19 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  plugins:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/plugins
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet build WhatsAppMessaging.Plugins -c Release
+      - run: dotnet test WhatsAppMessaging.Plugins.Tests
+
   bicep:
     runs-on: ubuntu-latest
     steps:

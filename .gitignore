@@ -9,5 +9,9 @@ out.channel.json
 *.pfx
 *.pem
 *.cer
+*.snk
+bin/
+obj/
+TestResults/
 .azure/
 .vscode/

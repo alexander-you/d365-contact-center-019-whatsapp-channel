@@ -10,7 +10,8 @@
 | Copilot Studio agent | Connected to Dynamics 365 Contact Center (handoff enabled) |
 | 019 account | WhatsApp line verified in 019, plus an API token |
 | Dataverse publisher | Customization prefix `alex`, option value prefix `62621`. Table and column names in the adapter use this prefix |
-| Tools | Azure CLI, Bicep, Azure Functions Core Tools v4, Node.js 22, PowerShell 7 |
+| Tools | Azure CLI, Bicep, Azure Functions Core Tools v4, Node.js 22, PowerShell 7, .NET SDK 8 (plug-in build) |
+| Code-signing certificate | For the Dataverse plug-in (managed identity requires a signed assembly). A self-signed certificate is supported for development and test |
 
 ## 1. Azure infrastructure
 
@@ -94,8 +95,14 @@ copy env.example.json env.json      # fill in organization, publisher, app, queu
 ./01-solution-and-tables.ps1        # solution, template catalog, outbound activity, opt-out column
 ./02-channel.ps1                    # app user, workstream, context variables, managed identity, channel, FIC
 ./03-copilot-studio.ps1             # global variables, topics, publish
-./04-security-role.ps1              # least-privilege role for the adapter app user
+./05-outbound-messages.ps1          # WhatsApp Message elastic table (outbound requests and lifecycle)
+./06-plugin-and-custom-api.ps1 -CertificatePath .\codesign.pfx -CertificatePassword (Read-Host -AsSecureString)
+                                    # plug-in, Custom APIs, async steps, plug-in managed identity, Service Bus role
+                                    # (development/test: -DevCertificate)
+./04-security-role.ps1              # adapter role + "WhatsApp Message Sender" role for callers
 ```
+
+Run `04-security-role.ps1` after `05`, because the roles reference the WhatsApp Message table. Assign **WhatsApp Message Sender** to the users, flow connections and agents that send templates. See [Outbound messaging](outbound-messaging.md#8-deployment).
 
 All scripts are idempotent. `02-channel.ps1` creates the **federated identity credential** from `GetComponentManagedIdentityFIC`. Re-run it after any change to the webhook configuration.
 
@@ -117,3 +124,4 @@ In the 019 portal (**Settings → URL assignment**), configure:
 | Send "Hi" on WhatsApp | Conversation in the workstream, agent reply on WhatsApp |
 | Send "menu" | Native WhatsApp buttons. A tap continues the topic with the right `SelectedId` |
 | `/tpl` from a representative | Template list or a sent confirmation |
+| `<prefix>_SendWhatsAppMessage` from Power Automate | Row *Queued* → *Sent* → *Delivered*; plug-in trace log shows *Enqueued* |

@@ -87,7 +87,7 @@ app.http("ApiOutboundTemplate", {
     catch (e) { return json(401, { error: (e as Error).message }); }
     try {
       const body: any = await req.json();
-      return json(200, await sendTemplate(body, ctx));
+      return json(202, await sendTemplate(body, ctx));
     } catch (e) {
       if (e instanceof OutboundError) return json(e.status, { error: e.code, message: e.message });
       if (e instanceof AuthError) return json(401, { error: e.message });

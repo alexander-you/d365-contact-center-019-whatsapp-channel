@@ -1,0 +1,85 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "WhatsApp Messaging (Dataverse)",
+    "description": "Send and cancel proactive WhatsApp template messages through the Dataverse Custom APIs of the WhatsApp 019 channel. Replace the host with your Dataverse organization host and the 'alex' prefix with your publisher prefix.",
+    "version": "1.2.0"
+  },
+  "host": "your-org.crm.dynamics.com",
+  "basePath": "/api/data/v9.2",
+  "schemes": [ "https" ],
+  "consumes": [ "application/json" ],
+  "produces": [ "application/json" ],
+  "securityDefinitions": {
+    "oauth2_auth": {
+      "type": "oauth2",
+      "flow": "accessCode",
+      "authorizationUrl": "https://login.microsoftonline.com/common/oauth2/authorize",
+      "tokenUrl": "https://login.microsoftonline.com/common/oauth2/token",
+      "scopes": {}
+    }
+  },
+  "security": [ { "oauth2_auth": [] } ],
+  "paths": {
+    "/alex_SendWhatsAppMessage": {
+      "post": {
+        "operationId": "SendWhatsAppMessage",
+        "summary": "Send a WhatsApp template message",
+        "description": "Creates a WhatsApp Message row (Queued or Scheduled). Delivery is asynchronous; track the row status.",
+        "parameters": [
+          { "name": "body", "in": "body", "required": true, "schema": { "$ref": "#/definitions/SendRequest" } }
+        ],
+        "responses": {
+          "200": { "description": "Message accepted", "schema": { "$ref": "#/definitions/MessageResponse" } },
+          "400": { "description": "Validation error (unknown template, missing variable, invalid recipient)" },
+          "403": { "description": "Caller lacks the WhatsApp Message Sender role" }
+        }
+      }
+    },
+    "/alex_CancelWhatsAppMessage": {
+      "post": {
+        "operationId": "CancelWhatsAppMessage",
+        "summary": "Cancel a queued or scheduled WhatsApp message",
+        "description": "Cancels the message if it has not been sent yet. Returns the resulting status.",
+        "parameters": [
+          { "name": "body", "in": "body", "required": true, "schema": { "$ref": "#/definitions/CancelRequest" } }
+        ],
+        "responses": {
+          "200": { "description": "Resulting status", "schema": { "$ref": "#/definitions/MessageResponse" } }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "SendRequest": {
+      "type": "object",
+      "required": [ "To", "Template" ],
+      "properties": {
+        "To": { "type": "string", "x-ms-summary": "To", "description": "Recipient: E.164 phone number (digits only) or WhatsApp user ID" },
+        "Template": { "type": "string", "x-ms-summary": "Template", "description": "Template name or provider template ID" },
+        "Variables": { "type": "string", "x-ms-summary": "Variables (JSON)", "description": "JSON object of template variables, e.g. {\"1\":\"Dana\"}" },
+        "Line": { "type": "string", "x-ms-summary": "Business line", "description": "Sending line. Default: environment variable WaDefaultLine" },
+        "ScheduledOn": { "type": "string", "format": "date-time", "x-ms-summary": "Scheduled on (UTC)", "description": "Send at this time. Empty = now" },
+        "CampaignId": { "type": "string", "x-ms-summary": "Campaign ID", "description": "Campaign or batch correlation" },
+        "IdempotencyKey": { "type": "string", "x-ms-summary": "Idempotency key", "description": "Returns the existing message when the key was already used" },
+        "Source": { "type": "string", "enum": [ "API", "Flow", "Agent", "Bot", "Campaign" ], "x-ms-summary": "Source" },
+        "CreateTimelineActivity": { "type": "boolean", "x-ms-summary": "Create timeline activity", "description": "Also create a timeline activity after sending" },
+        "ConversationId": { "type": "string", "x-ms-summary": "Conversation ID", "description": "Contact Center conversation to notify" }
+      }
+    },
+    "CancelRequest": {
+      "type": "object",
+      "required": [ "MessageId" ],
+      "properties": {
+        "MessageId": { "type": "string", "format": "uuid", "x-ms-summary": "Message ID" }
+      }
+    },
+    "MessageResponse": {
+      "type": "object",
+      "properties": {
+        "MessageId": { "type": "string", "format": "uuid", "x-ms-summary": "Message ID" },
+        "Status": { "type": "string", "x-ms-summary": "Status" }
+      }
+    }
+  }
+}

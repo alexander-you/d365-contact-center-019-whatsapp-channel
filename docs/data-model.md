@@ -2,7 +2,7 @@
 
 The solution uses three data stores:
 
-1. **Dataverse:** a custom solution with two tables, plus standard Contact Center tables.
+1. **Dataverse:** a custom solution with three tables (template catalog, WhatsApp Message elastic table, outbound timeline activity), plus standard Contact Center tables.
 2. **Contact Center configuration:** the channel, workstream, context variables and managed identity records.
 3. **Adapter state:** Azure Table Storage holding operational keys only. It stores no message bodies.
 
@@ -14,6 +14,9 @@ erDiagram
     INCIDENT ||--o{ WA_OUTBOUND_MESSAGE : "regarding"
     WA_TEMPLATE ||--o{ WA_OUTBOUND_MESSAGE : "templateId"
     WA_OUTBOUND_MESSAGE }o--o| OC_LIVEWORKITEM : "conversationId (on reply)"
+    WA_TEMPLATE ||--o{ WA_MESSAGE : "template"
+    WA_MESSAGE |o--o| WA_OUTBOUND_MESSAGE : "activityid (optional timeline)"
+    WA_MESSAGE }o--o| OC_LIVEWORKITEM : "conversationId (on reply)"
 
     LIVEWORKSTREAM ||--o{ WORKSTREAM_CONTEXT_VARIABLE : "defines"
     LIVEWORKSTREAM ||--|| CUSTOM_MESSAGING_CHANNEL : "bound to"
@@ -40,6 +43,36 @@ erDiagram
         multichoice usage "Agent | Automation | Bot | Campaign"
         memo    variablelabels "JSON"
         memo    variablebindings "JSON"
+    }
+
+    WA_MESSAGE {
+        guid    wamessageid PK
+        string  partitionid "Elastic partition = recipient"
+        int     ttlinseconds "Retention (default 365 days)"
+        string  to
+        string  linenumber
+        string  template
+        string  templateid
+        memo    variables "JSON"
+        memo    renderedbody
+        choice  messagestatus "Queued | Scheduled | Sending | Sent | Delivered | Read | Replied | Failed | Canceled | Expired"
+        choice  source "API | Flow | Agent | Bot | Campaign"
+        datetime scheduledon
+        datetime senton
+        datetime repliedon
+        string  campaignid
+        string  idempotencykey
+        string  relatedentity
+        string  relatedrecordid
+        string  conversationid
+        string  o19unique
+        int     attempts
+        string  failurecode
+        string  failurereason
+        string  replybutton
+        int     replybuttonindex
+        bool    createtimelineactivity
+        string  activityid
     }
 
     WA_OUTBOUND_MESSAGE {
@@ -118,7 +151,10 @@ erDiagram
     }
 ```
 
-`WA_TEMPLATE`, `WA_OUTBOUND_MESSAGE` and the `whatsappoptout` column are delivered by the solution. The remaining entities are standard Dynamics 365 Contact Center tables.
+`WA_TEMPLATE`, `WA_MESSAGE`, `WA_OUTBOUND_MESSAGE` and the `whatsappoptout` column are delivered by the solution. The remaining entities are standard Dynamics 365 Contact Center tables.
+
+- **`WA_MESSAGE`** (*WhatsApp Message*, elastic) is the system of record for every proactive message: request, queue item and delivery lifecycle. Related records are stored as text (`relatedentity`, `relatedrecordid`) so any table can be referenced. See [Outbound messaging](outbound-messaging.md).
+- **`WA_OUTBOUND_MESSAGE`** (*WhatsApp Outbound*, activity) is the optional timeline entry, created for representative sends or on request.
 
 ## 2. Workstream context variables
 
@@ -132,7 +168,11 @@ erDiagram
 | `wa_Username` | Text | Yes | WhatsApp username, when the customer has one |
 | `wa_EntryPoint` | Text | Yes | `organic` · `outbound-reply` · `template-button` |
 | `wa_TemplateName` | Text | Yes | Template that triggered the conversation |
+| `wa_OutboundMessageId` | Text | No | WhatsApp Message row the customer replied to |
+| `wa_TemplateButton` | Text | Yes | Quick-reply button label the customer tapped |
+| `wa_TemplateButtonIndex` | Text | No | 1-based position of the tapped button |
 | `wa_CampaignId` | Text | No | Outbound correlation |
+| `wa_RelatedEntity` | Text | No | Table of the record that triggered the outbound message |
 | `wa_RelatedRecordId` | Text | No | Record that triggered the outbound message |
 | `wa_Is24hWindowOpen` | Boolean | No | Informational |
 | `wa_LastInteraction` | Text (JSON) | No | Full payload of the latest button or list selection (only when `WA_SELECTION_EVENT=true`) |
@@ -146,7 +186,6 @@ erDiagram
     CONVERSATIONS ||--|| CONVINDEX : "conversationId"
     CONVERSATIONS ||--o| PENDINGOPTIONS : "latest prompt"
     CONVERSATIONS ||--o{ MSGMAP : "sent messages"
-    OUTBOUNDLOG }o--|| CONVERSATIONS : "reply correlation"
 
     CONVERSATIONS {
         string PartitionKey "line"
@@ -169,22 +208,13 @@ erDiagram
         string json "promptId, kind, options(id,label,sent)"
     }
     MSGMAP {
-        string PartitionKey "conversationId"
+        string PartitionKey "conversationId, or tpl for templates"
         string RowKey "019 unique"
         string sentUtc
         string kind
         string dvId
-    }
-    OUTBOUNDLOG {
-        string PartitionKey "line"
-        string RowKey "waUserId:reverseTicks"
-        string templateName
-        string renderedBody
-        string campaignId
-        string relatedRecordId
-        bool   skipBot
-        string sentUtc
-        bool   replied
+        string msgId "templates: WhatsApp Message row"
+        string partitionId "templates: elastic partition"
     }
     DEDUPE {
         string PartitionKey "source"
@@ -197,4 +227,4 @@ erDiagram
     }
 ```
 
-**Data minimization:** message bodies are never written to tables. They exist only transiently in Service Bus (TTL of 1 day) and in Dynamics 365.
+**Data minimization:** message bodies are never written to adapter tables. Conversation messages exist only transiently in Service Bus (TTL of 1 day) and in Dynamics 365. Outbound template content is stored only in the Dataverse WhatsApp Message row, under its retention period.

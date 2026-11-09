@@ -55,7 +55,9 @@ $ctx = @(
     @{ n = 'wa_LastInteraction'; t = 192350000; d = $false },
     @{ n = 'wa_CustomerId'; t = 192350000; d = $false }, @{ n = 'wa_CustomerPhone'; t = 192350000; d = $true },
     @{ n = 'wa_Username'; t = 192350000; d = $true },
-    @{ n = 'wa_ReferralMessageId'; t = 192350000; d = $false }, @{ n = 'wa_Referral'; t = 192350000; d = $false }
+    @{ n = 'wa_ReferralMessageId'; t = 192350000; d = $false }, @{ n = 'wa_Referral'; t = 192350000; d = $false },
+    @{ n = 'wa_OutboundMessageId'; t = 192350000; d = $false }, @{ n = 'wa_TemplateButton'; t = 192350000; d = $true },
+    @{ n = 'wa_TemplateButtonIndex'; t = 192350000; d = $false }, @{ n = 'wa_RelatedEntity'; t = 192350000; d = $false }
 )
 $existing = (Invoke-Dv -Path "msdyn_ocliveworkstreamcontextvariables?`$filter=_msdyn_liveworkstreamid_value eq $wsId&`$select=msdyn_name").value.msdyn_name
 foreach ($c in $ctx) {

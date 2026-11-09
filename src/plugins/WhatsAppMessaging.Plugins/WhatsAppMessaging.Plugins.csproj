@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <AssemblyName>WhatsAppMessaging.Plugins</AssemblyName>
+    <RootNamespace>WhatsAppMessaging.Plugins</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Version>1.2.0</Version>
+    <!-- Strong-name key is created by scripts/06-plugin-and-custom-api.ps1 and is not committed -->
+    <SignAssembly Condition="Exists('WhatsAppMessaging.Plugins.snk')">true</SignAssembly>
+    <AssemblyOriginatorKeyFile Condition="Exists('WhatsAppMessaging.Plugins.snk')">WhatsAppMessaging.Plugins.snk</AssemblyOriginatorKeyFile>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CrmSdk.CoreAssemblies" Version="9.0.2.*" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Runtime.Serialization" />
+  </ItemGroup>
+</Project>

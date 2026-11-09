@@ -6,7 +6,8 @@ import { Conversations, getEntity, upsert, remove, query, odata } from "./state"
 import {
   CLOSE_EVENTS, MEDIA_TYPES, Pending, inboundToText, isSystemEvent, markdownToWhatsApp, planRender, resolveSelection, splitText,
 } from "./mapping";
-import { handleAgentTemplateCommand, findRecentOutbound, markOutboundReplied } from "./templates";
+import { handleAgentTemplateCommand } from "./templates";
+import { findRepliedMessage, findRecentMessage, markMessageReplied, onTemplateDelivery, ReplyMatch } from "./outbound";
 import { attachmentSettings, checkForO19, download, extOf, mediaUrlOf, mimeOf, publishForO19 } from "./media";
 
 export interface InboundPush {
@@ -20,12 +21,12 @@ const now = () => new Date().toISOString();
 export function referralOf(p: any): { quoteUnique?: string; referral?: unknown } {
   const out: { quoteUnique?: string; referral?: unknown } = {};
   if (p?.quoteUnique) out.quoteUnique = String(p.quoteUnique);
-  const r = p?.referral;
-  if (r && typeof r === "object" && Object.keys(r).length) out.referral = r;
-  else if (typeof r === "string" && r.trim() && r !== "false") { try { out.referral = JSON.parse(r); } catch { out.referral = r; } }
+  let r = p?.referral;
+  if (typeof r === "string") { const t = r.trim(); if (!t || t === "false") r = undefined; else { try { r = JSON.parse(t); } catch { out.referral = t; return out; } } }
+  // 019 always sends {"ref_type":"none"} when there is no ad referral
+  if (r && typeof r === "object" && Object.keys(r).length && String((r as any).ref_type ?? "").toLowerCase() !== "none") out.referral = r;
   return out;
-}
-const AGENT_EVENTS = new Set(["AgentJoined", "AgentAccepted", "AgentAssigned", "AgentJoinedCustomerConversation", "TransferAgentAcceptSession"]);
+}const AGENT_EVENTS = new Set(["AgentJoined", "AgentAccepted", "AgentAssigned", "AgentJoinedCustomerConversation", "TransferAgentAcceptSession"]);
 const waIdOf = (p: InboundPush) => {
   const alt = String((p as any).from_id ?? p.id ?? "");
   return alt.includes(".") ? alt : String(p.from);
@@ -118,8 +119,18 @@ export async function processInbound(p: InboundPush, ctx: InvocationContext): Pr
   }
 
   const messageText = inboundToText(p);
+  const existed = !!conversationId;
   if (!conversationId) {
     conversationId = await createConversation(line, waUserId, phone, p, ctx);
+  }
+  // Template button tapped while a conversation is already open: mark the exact outbound message and tell the agent which button
+  let templateReply: Record<string, unknown> | undefined;
+  if (existed && p.type === "button" && p.quoteUnique) {
+    const tm = await findRepliedMessage(String(p.quoteUnique), String(p.body ?? "")).catch(() => undefined);
+    if (tm) {
+      await markMessageReplied(tm, conversationId, ctx);
+      templateReply = { messageId: tm.ref.id, template: tm.templateName, button: tm.button, buttonIndex: tm.buttonIndex, campaignId: tm.row.alex_campaignid, relatedEntity: tm.row.alex_relatedentity, relatedRecordId: tm.row.alex_relatedrecordid };
+    }
   }
 
   const from = { id: waUserId, name: p.senderName ?? waUserId };
@@ -146,7 +157,7 @@ export async function processInbound(p: InboundPush, ctx: InvocationContext): Pr
       await remove("PendingOptions", conversationId, "latest");
       ctx.log(JSON.stringify({ evt: "OptionMatched", method: sel.method, source: pend.source, conversationId }));
     } else if (messageText || attachments) {
-      await d365.sendMessage(conversationId, { from, text: messageText || undefined, attachments, channelData: { wa: { o19Unique: p.unique, type: p.type, ...referralOf(p) } } });
+      await d365.sendMessage(conversationId, { from, text: messageText || undefined, attachments, channelData: { wa: { o19Unique: p.unique, type: p.type, ...referralOf(p), ...(templateReply ? { templateReply } : {}) } } });
     }
   } catch (e) {
     if (e instanceof D365Error && (e.status === 404 || e.status === 409 || e.status === 400)) {
@@ -162,12 +173,15 @@ export async function processInbound(p: InboundPush, ctx: InvocationContext): Pr
 }
 
 async function createConversation(line: string, waUserId: string, phone: string | undefined, p: InboundPush, ctx: InvocationContext): Promise<string> {
-  const out = await findRecentOutbound(line, waUserId, cfg.outboundReplyWindowHours());
+  const ref = referralOf(p);
+  // Exact correlation: the outbound message the customer replied to (quoteUnique); fallback: latest template within the reply window
+  const match = (await findRepliedMessage(ref.quoteUnique, p.type === "button" ? String(p.body ?? "") : undefined).catch(() => undefined))
+    ?? (await findRecentMessage(line, [waUserId, phone ?? ""], cfg.outboundReplyWindowHours()).catch(() => undefined));
   const conversationcontext: Record<string, { isDisplayable: boolean; value: string | boolean }> = {
     wa_LineNumber: { isDisplayable: false, value: line },
     wa_UserId: { isDisplayable: false, value: waUserId },
     wa_ProfileName: { isDisplayable: true, value: p.senderName ?? "" },
-    wa_EntryPoint: { isDisplayable: true, value: out ? (p.type === "button" ? "template-button" : "outbound-reply") : "organic" },
+    wa_EntryPoint: { isDisplayable: true, value: match ? (p.type === "button" ? "template-button" : "outbound-reply") : "organic" },
     wa_Is24hWindowOpen: { isDisplayable: false, value: true },
     // Mirror customercontext so the agent receives the values directly (msdyn_customengagementctx is only passed to the agent as a record reference)
     wa_CustomerId: { isDisplayable: false, value: `${line}:${waUserId}` },
@@ -175,28 +189,36 @@ async function createConversation(line: string, waUserId: string, phone: string 
   if (phone) conversationcontext.wa_CustomerPhone = { isDisplayable: true, value: phone };
   const username = String((p as any).username ?? "").trim();
   if (username) conversationcontext.wa_Username = { isDisplayable: true, value: username };
-  const ref = referralOf(p);
   if (ref.quoteUnique) conversationcontext.wa_ReferralMessageId = { isDisplayable: false, value: ref.quoteUnique };
   if (ref.referral) conversationcontext.wa_Referral = { isDisplayable: false, value: JSON.stringify(ref.referral).slice(0, 2000) };
-  if (out) {
-    conversationcontext.wa_TemplateName = { isDisplayable: true, value: out.templateName ?? "" };
-    conversationcontext.wa_CampaignId = { isDisplayable: false, value: out.campaignId ?? "" };
-    conversationcontext.wa_RelatedRecordId = { isDisplayable: false, value: out.relatedRecordId ?? "" };
-  }
+  if (match) Object.assign(conversationcontext, templateContext(match));
   const r = await d365.createConversation({
     customercontext: { customerid: `${line}:${waUserId}`, phonenumber: phone, preferredname: p.senderName },
     conversationcontext,
     conversationrequestid: p.unique,
-    startmessage: out ? { message: `📤 נשלחה תבנית WhatsApp (${out.templateName}) ב-${out.sentUtc}: ${out.renderedBody ?? ""}`.slice(0, 4000) } : undefined,
-    skipdeflectionbot: out?.skipBot ?? false,
+    startmessage: match ? { message: `📤 WhatsApp template "${match.templateName ?? ""}" (${match.row.alex_senton ?? ""}): ${match.row.alex_renderedbody ?? ""}`.slice(0, 4000) } : undefined,
+    skipdeflectionbot: false,
   });
   await Conversations.set(line, waUserId, { conversationId: r.conversationId, state: "Active", createdUtc: now(), phone, profileName: p.senderName, participant: "bot" });
-  if (out) await markOutboundReplied(out, r.conversationId, ctx);
+  if (match) await markMessageReplied(match, r.conversationId, ctx);
   if (!phone) await notice(r.conversationId, "ℹ️ מספר הטלפון של הלקוח מוסתר (WhatsApp username)", ctx);
-  ctx.log(JSON.stringify({ evt: "ConversationCreated", isNew: r.isNew, conversationId: r.conversationId, entry: conversationcontext.wa_EntryPoint.value }));
+  ctx.log(JSON.stringify({ evt: "ConversationCreated", isNew: r.isNew, conversationId: r.conversationId, entry: conversationcontext.wa_EntryPoint.value, exact: !!match?.button || !!(match && ref.quoteUnique) }));
   return r.conversationId;
 }
 
+/** Context variables that tell the agent exactly which outbound message (and button) started the conversation. */
+function templateContext(m: ReplyMatch): Record<string, { isDisplayable: boolean; value: string }> {
+  const c: Record<string, { isDisplayable: boolean; value: string }> = {
+    wa_TemplateName: { isDisplayable: true, value: m.templateName ?? "" },
+    wa_OutboundMessageId: { isDisplayable: false, value: m.ref.id },
+  };
+  if (m.button) c.wa_TemplateButton = { isDisplayable: true, value: m.button };
+  if (m.buttonIndex) c.wa_TemplateButtonIndex = { isDisplayable: false, value: String(m.buttonIndex) };
+  if (m.row.alex_campaignid) c.wa_CampaignId = { isDisplayable: false, value: m.row.alex_campaignid };
+  if (m.row.alex_relatedrecordid) c.wa_RelatedRecordId = { isDisplayable: false, value: m.row.alex_relatedrecordid };
+  if (m.row.alex_relatedentity) c.wa_RelatedEntity = { isDisplayable: false, value: m.row.alex_relatedentity };
+  return c;
+}
 async function safeSend(fn: () => Promise<unknown>, ctx: InvocationContext) {
   try { await fn(); } catch (e) { ctx.warn(`019 send failed: ${(e as Error).message}`); }
 }
@@ -324,7 +346,7 @@ export async function processStatus(p: any, ctx: InvocationContext): Promise<voi
     const unique = String(p.unique ?? "");
     const map = (await query<{ partitionKey: string; sentUtc: string; kind: string }>("MsgMap", odata`RowKey eq ${unique}`, 1))[0];
     await updateOutboundStatus(unique, ack, p, ctx);
-    if (ack === 3 && map?.partitionKey) await sendReadReceipt(map.partitionKey, map.sentUtc, ctx);
+    if (ack === 3 && map?.partitionKey && map.partitionKey !== "tpl") await sendReadReceipt(map.partitionKey, map.sentUtc, ctx);
     return;
   }
   if (p.hook === "system") {
@@ -349,8 +371,7 @@ export async function processStatus(p: any, ctx: InvocationContext): Promise<voi
 
 async function updateOutboundStatus(unique: string, ack: number, p: any, ctx: InvocationContext, failure?: string) {
   if (!unique) return;
-  const { updateOutboundDelivery } = await import("./templates");
-  await updateOutboundDelivery(unique, ack, !!p.isBilledTemplate, failure, ctx);
+  await onTemplateDelivery(unique, ack, !!p.isBilledTemplate, failure, ctx);
 }
 
 /** §8.6 – one targeted lookup, then MessageRead for the latest rep/bot message (marks all previous as read). */

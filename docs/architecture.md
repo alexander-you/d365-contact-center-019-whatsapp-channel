@@ -11,7 +11,7 @@ A single serverless component, the **WhatsApp Adapter**, translates between two 
 | **019 WhatsApp API** | REST (Bearer token) + push webhooks (messages, delivery reports, system events) | Both ways |
 | **Dynamics 365 Contact Center Messaging API** | REST (Entra OAuth) + webhook (Entra JWT) using the Bot Framework Activity schema | Both ways |
 
-Everything else is **standard product configuration**: workstream, routing, queues, Copilot Studio agent, automated messages, masking and surveys. A small Dataverse solution adds the template catalog and the outbound activity.
+Everything else is **standard product configuration**: workstream, routing, queues, Copilot Studio agent, automated messages, masking and surveys. A small Dataverse solution adds the template catalog, the *WhatsApp Message* elastic table with its Custom APIs, and the outbound timeline activity.
 
 ### Design principles
 
@@ -41,9 +41,10 @@ flowchart TB
         PIN[ProcInbound<br/>SB session]
         POUT[ProcOutbound<br/>SB session]
         PST[ProcStatus<br/>SB]
+        PTPL[ProcTemplate<br/>SB]
         TPL[TplSync<br/>Timer]
       end
-      SB[(Service Bus<br/>sb-inbound · sb-outbound · sb-status)]
+      SB[(Service Bus<br/>sb-inbound · sb-outbound · sb-status · sb-template)]
       TBL[(Table Storage<br/>conversation · options · map · dedupe)]
       KV[(Key Vault)]
       AI[Application Insights]
@@ -55,7 +56,7 @@ flowchart TB
       UR[Unified Routing]
       MCS[Copilot Studio agent]
       CSW[Copilot Service workspace]
-      DV[(Dataverse)]
+      DV[(Dataverse<br/>WhatsApp Message · Custom APIs)]
     end
 
     O19 -- push --> IN019 --> SB
@@ -63,7 +64,10 @@ flowchart TB
     HOOK -- activities --> IND365 --> SB
     SB --> POUT -- send --> O19
     SB --> PST
-    API --> O19
+    API -- Custom API --> DV
+    DV -- "async plug-in<br/>managed identity" --> SB
+    SB --> PTPL -- send template --> O19
+    PTPL -- status --> DV
     TPL -- templates --> O19
     TPL -- upsert --> DV
     MAPI --> UR --> MCS
@@ -85,7 +89,9 @@ flowchart TB
 | `ProcInbound` | Creates or continues conversations through the Messaging API, maps message types, resolves button and list selections, handles opt-out |
 | `ProcOutbound` | Renders agent and representative activities into WhatsApp text, buttons or lists. Handles typing, close events and the `/tpl` command |
 | `ProcStatus` | Updates delivery status, sends read receipts, posts delivery notices to representatives, tracks template status |
-| `ApiOutboundTemplate` | Entra-protected API for sending templates (flows, custom connector, custom page) |
+| `ApiOutboundTemplate` | Entra-protected REST API for sending templates. Calls the Dataverse Custom API and returns `202` |
+| `ProcTemplate` | Processes `sb-template`: re-reads the *WhatsApp Message* row, sends the template to 019, updates the status and creates the optional timeline activity |
+| Dataverse Custom APIs + plug-in | `<prefix>_SendWhatsAppMessage` / `<prefix>_CancelWhatsAppMessage` validate and create rows; an async step enqueues them to Service Bus with a managed identity. See [Outbound messaging](outbound-messaging.md) |
 | `TplSync` | Synchronizes 019 templates into the Dataverse template catalog every 15 minutes |
 
 ## 4. Key sequences
@@ -142,24 +148,31 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant F as Flow / Agent / Custom page
-    participant A as Adapter API
-    participant O as 019
+    participant F as Flow / Agent / API
     participant DV as Dataverse
+    participant SB as Service Bus
+    participant A as Adapter
+    participant O as 019
     participant C as Customer
     participant D as D365
-    F->>A: POST /outbound/template (Entra JWT)
+    F->>DV: SendWhatsAppMessage (Custom API)
+    DV->>DV: validate, create WhatsApp Message (Queued)
+    DV-->>F: MessageId, Queued
+    DV->>SB: async plug-in step (managed identity)
+    SB->>A: ProcTemplate
+    A->>DV: re-read row, status = Sending
     A->>O: send-whatsapp-template
-    A->>DV: create WhatsApp Outbound activity (timeline)
+    A->>DV: status = Sent, 019 id (+ timeline activity)
     O->>C: template message
-    O-->>A: DLR sent / delivered / read
-    A->>DV: update delivery status
-    C->>O: reply
-    O->>A: incoming push
-    A->>D: create conversation (entry = outbound-reply, startmessage = template)
-    A->>DV: status = Replied, link conversation
+    O-->>A: DLR delivered / read
+    A->>DV: status = Delivered / Read
+    C->>O: tap button "Confirm"
+    O->>A: incoming push (quoteUnique = sent message)
+    A->>DV: exact match → status = Replied, button
+    A->>D: create conversation (entry = template-button, template context)
 ```
 
+Details: [Outbound messaging](outbound-messaging.md).
 ## 5. Message mapping
 
 | WhatsApp (019) | Dynamics 365 |

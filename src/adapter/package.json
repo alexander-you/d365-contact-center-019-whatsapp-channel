@@ -1,6 +1,6 @@
 {
   "name": "d365-019-whatsapp-adapter",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "WhatsApp (019) <-> Dynamics 365 Contact Center Messaging API adapter",
   "main": "dist/src/functions/*.js",
   "scripts": {
