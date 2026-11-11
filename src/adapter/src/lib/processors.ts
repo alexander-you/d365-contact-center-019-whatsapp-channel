@@ -85,6 +85,14 @@ export async function processInbound(p: InboundPush, ctx: InvocationContext): Pr
   let conv = await Conversations.get(line, waUserId);
   let conversationId = conv?.state === "Active" ? conv.conversationId : undefined;
 
+  // 019 best practice for AI bots: show "typing…" (and blue ticks) while the agent prepares the answer.
+  // Not when a representative handles the conversation – their real typing comes from D365.
+  const typing = cfg.inboundTyping() && conv?.participant !== "agent"
+    ? o19.typing(line, waUserId)
+        .then(() => ctx.log(JSON.stringify({ evt: "TypingSent", source: "inbound" })))
+        .catch((e) => ctx.log(`typing ignored: ${(e as Error).message}`))
+    : Promise.resolve();
+
   // Attachments: honour the channel's "customers can send file attachments" setting; files go to representatives, not to the agent bot (unless WA_MEDIA_TO_BOT=true)
   let attachments: Array<{ contentType: string; contentUrl: string; name: string }> | undefined;
   if (MEDIA_TYPES.has(p.type)) {
@@ -169,6 +177,7 @@ export async function processInbound(p: InboundPush, ctx: InvocationContext): Pr
     } else throw e;
   }
   await Conversations.set(line, waUserId, { conversationId, state: "Active", lastInboundUtc: now(), phone, profileName: p.senderName });
+  await typing;
   ctx.log(JSON.stringify({ evt: "InboundReceived", type: p.type, conversationId }));
 }
 

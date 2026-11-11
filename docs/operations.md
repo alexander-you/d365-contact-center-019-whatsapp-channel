@@ -9,6 +9,7 @@ The adapter emits structured events to Application Insights. Events carry ids, t
 | `O19Push` | 019 message push received |
 | `ConversationCreated` | Messaging API conversation created (`entry`: organic / outbound-reply / template-button) |
 | `InboundReceived` | Customer message posted to Dynamics 365 |
+| `TypingSent` | "typing…" indicator sent to the customer on an incoming message (`WA_INBOUND_TYPING`) |
 | `D365Activity` | Activity received from the Dynamics 365 webhook |
 | `OptionRendered` | Buttons, list or numbered options sent (`kind`, `count`, `source`) |
 | `OptionMatched` | Selection resolved (`method`: tap / number / typed) |

@@ -86,6 +86,7 @@ Use [`local.settings.example.json`](../src/adapter/local.settings.example.json) 
 | `DATAVERSE_URL` | `https://<org>.crm.dynamics.com` |
 | `O19_LINE_NUMBERS` | Comma-separated WhatsApp lines |
 | `O19_SIMULATOR` | `false` in production. `true` records 019 calls for local testing |
+| `WA_INBOUND_TYPING` | `true` (default): show "typing…" to the customer while the agent prepares an answer. Requires typing support on the 019 account |
 
 ## 5. Dynamics 365 Contact Center and Copilot Studio
 

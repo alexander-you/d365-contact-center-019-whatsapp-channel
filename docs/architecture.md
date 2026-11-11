@@ -182,13 +182,14 @@ Details: [Outbound messaging](outbound-messaging.md).
 | `location` | Text with a map link |
 | `contacts` | Text with the contact name and number |
 | `reaction` | Ignored |
+| Any customer message (agent conversations) | 019 `typing` is sent immediately, so the customer sees blue ticks and "typing…" while the agent prepares the answer (`WA_INBOUND_TYPING`, default `true`). Not sent while a representative handles the conversation |
 | Media (`image`, `video`, `audio`, `ptt`, `document`) | Attachment in the conversation when the channel allows customer attachments and a representative is handling it. See [attachments.md](./attachments.md) |
 
 | Dynamics 365 activity | WhatsApp (019) |
 |---|---|
 | Message (plain) | `send-whatsapp-message` (Markdown → WhatsApp formatting, 4,096-character split) |
 | Message with option block, suggested actions, or Hero / Adaptive Card | `send-buttons` / `send-list` / numbered text |
-| `typing` | `typing` |
+| `typing` (representative typing in the workspace) | `typing` |
 | Close events | Conversation state closed |
 | Representative `/tpl <name> v1\|v2` | `send-whatsapp-template` |
 

@@ -24,6 +24,8 @@ export const cfg = {
   o19Simulator: () => opt("O19_SIMULATOR", "false").toLowerCase() === "true",
   // Off by default: D365 delivers custom events to the agent as empty messages, which breaks topics that handle every message.
   selectionEvent: () => opt("WA_SELECTION_EVENT", "false").toLowerCase() === "true",
+  /** Send a 019 "typing…" indicator as soon as a customer message arrives (bot conversations). Also marks the message as read. */
+  inboundTyping: () => opt("WA_INBOUND_TYPING", "true").toLowerCase() === "true",
   // Attachments (enabled per direction by the channel's "File attachments" setting in Contact Center admin)
   mediaContainer: () => opt("WA_MEDIA_CONTAINER", "wa-media"),
   mediaLinkMinutes: () => Number(opt("WA_MEDIA_LINK_MINUTES", "60")),
